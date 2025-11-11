@@ -1,0 +1,45 @@
+
+The STOMP NIO Project
+====================
+
+Please visit the STOMP NIO web site for more information:
+
+* https://github.com/fpseverino/stomp-nio
+
+Copyright 2025 Francesco Paolo Severino
+
+The STOMP NIO Project licenses this file to you under the MIT License
+(the "License"); you may not use this file except in compliance
+with the License. You may obtain a copy of the License at:
+
+https://opensource.org/license/mit
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.
+
+Also, please refer to each LICENSE.<component>.txt file, which is located in
+the 'license' directory of the distribution file, for the license terms of the
+components that this product depends on.
+
+-------------------------------------------------------------------------------
+
+This product was heavily influenced by MQTT NIO.
+It contains a derivation of MQTT NIO's 'MQTTTask.swift'.
+
+  * LICENSE (Apache License 2.0)
+    * https://github.com/swift-server-community/mqtt-nio/blob/main/LICENSE
+  * HOMEPAGE:
+    * https://github.com/swift-server-community/mqtt-nio
+
+---
+
+This product was heavily influenced by valkey-swift.
+It contains a derivation of valkey-swift's 'ValkeySubscriptions.swift', 'ValkeyChannelHandler.swift' and 'ValkeyConnection.swift'.
+
+  * LICENSE (Apache License 2.0)
+    * https://github.com/valkey-io/valkey-swift/blob/main/LICENSE.txt
+  * HOMEPAGE:
+    * https://github.com/valkey-io/valkey-swift
