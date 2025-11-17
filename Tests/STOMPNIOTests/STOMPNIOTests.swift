@@ -49,6 +49,20 @@ struct STOMPNIOTests {
         }
     }
 
+    @Test("Wrong Credentials")
+    func wrongCredentials() async throws {
+        await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
+            _ = try await STOMPConnection.withConnection(
+                host: "localhost",
+                port: 61613,
+                configuration: .init(
+                    authentication: .init(login: "wrong-user", passcode: "wrong-pass")
+                ),
+                logger: self.publisherLogger
+            ) { _ in }
+        }
+    }
+
     @Test
     func execute() async throws {
         try await STOMPConnection.withConnection(
