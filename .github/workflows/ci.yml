@@ -26,35 +26,17 @@ jobs:
       image: ${{ matrix.tag }}
     services:
       rabbitmq:
-        image: rabbitmq:3.13
+        image: rabbitmq:4.2.1
+        options: --hostname rabbitmq
         ports:
           - 61613:61613
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-        volumes:
-          - ${{ github.workspace }}/.github/rabbitmq:/etc/rabbitmq:ro
     steps:
     - name: Checkout
       uses: actions/checkout@v6
-    - name: Wait for STOMP port
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        set -e
-        apt-get -qq update
-        apt-get -yqq install netcat-openbsd
-        for i in {1..120}; do
-          if nc -z rabbitmq 61613; then
-            echo "STOMP port is up"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "STOMP port did not become ready in time" >&2
-        exit 1
+    - name: Enable STOMP plugin
+      uses: docker://docker
+      with:
+        args: docker cp RabbitMQ/enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins && docker restart rabbitmq
     - name: Test
       env:
         STOMP_SERVER: rabbitmq
