@@ -28,7 +28,6 @@ jobs:
       rabbitmq:
         image: rabbitmq:3.13
         ports:
-          - 5672:5672
           - 61613:61613
         options: >-
           --health-cmd "rabbitmq-diagnostics -q ping"
@@ -39,6 +38,22 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v6
+    - name: Wait for STOMP port
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        set -e
+        apt-get -qq update
+        apt-get -yqq install netcat-openbsd
+        for i in {1..120}; do
+          if nc -z rabbitmq 61613; then
+            echo "STOMP port is up"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "STOMP port did not become ready in time" >&2
+        exit 1
     - name: Test
       env:
         STOMP_SERVER: rabbitmq
