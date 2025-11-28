@@ -30,13 +30,11 @@ jobs:
         options: --hostname rabbitmq
         ports:
           - 61613:61613
+        volumes:
+          - ${{ github.workspace }}/RabbitMQ/enabled_plugins:/etc/rabbitmq/enabled_plugins
     steps:
     - name: Checkout
       uses: actions/checkout@v6
-    - name: Enable STOMP plugin
-      uses: docker://docker
-      with:
-        args: docker cp RabbitMQ/enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins && docker restart rabbitmq
     - name: Test
       env:
         STOMP_SERVER: rabbitmq
