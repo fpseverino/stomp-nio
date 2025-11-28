@@ -35,8 +35,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-        volumes:
-          - ${{ github.workspace }}/.github/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+          --volume=${{ github.workspace }}/.github/rabbitmq:/etc/rabbitmq:ro
     steps:
     - name: Checkout
       uses: actions/checkout@v6
