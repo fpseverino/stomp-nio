@@ -1,10 +1,5 @@
-import NIOCore
-
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
 import Foundation
-#endif
+import NIOCore
 
 struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
     typealias InboundOut = STOMPFrame

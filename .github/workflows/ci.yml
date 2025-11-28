@@ -1,0 +1,67 @@
+name: CI
+
+on:
+   push:
+     branches:
+     - main
+   pull_request:
+     branches:
+     - main
+   release:
+     types: [published]
+   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-ci
+  cancel-in-progress: true
+
+jobs:
+  macos-unit:
+    runs-on: macOS-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Start RabbitMQ
+      uses: namoshek/rabbitmq-github-action@v1
+      with:
+        version: '4.2.1'
+        ports: '61613:61613'
+        plugins: 'rabbitmq_stomp'
+    - name: Test
+      run: swift test
+
+  linux-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        tag:
+          - swift:6.2
+    container:
+      image: ${{ matrix.tag }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Start RabbitMQ
+      uses: namoshek/rabbitmq-github-action@v1
+      with:
+        version: '4.2.1'
+        ports: '61613:61613'
+        plugins: 'rabbitmq_stomp'
+    - name: Test
+      run: swift test
+
+  lint:
+    runs-on: ubuntu-latest
+    container: swift:noble
+    timeout-minutes: 5
+    steps:
+      - name: Configure git
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Lint
+        run: |
+          apt -q update && apt -yq install curl
+          curl -s https://raw.githubusercontent.com/swiftlang/github-workflows/refs/heads/main/.github/workflows/scripts/check-swift-format.sh | bash
