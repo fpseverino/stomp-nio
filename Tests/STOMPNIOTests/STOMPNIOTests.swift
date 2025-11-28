@@ -7,7 +7,7 @@ import Testing
 
 @Suite("STOMP NIO Tests")
 struct STOMPNIOTests {
-    static let hostname = ProcessInfo.processInfo.environment["STOMP_SERVER"] ?? "localhost"
+    static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {

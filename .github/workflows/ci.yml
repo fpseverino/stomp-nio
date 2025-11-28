@@ -38,10 +38,14 @@ jobs:
     - name: Enable STOMP plugin
       uses: docker://docker
       with:
-        args: docker cp enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins && docker restart rabbitmq
+        args: docker cp enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins
+    - name: Restart RabbitMQ
+      uses: docker://docker
+      with:
+        args: docker restart rabbitmq
     - name: Test
       env:
-        STOMP_SERVER: rabbitmq
+        RABBITMQ_SERVER: rabbitmq
       run: swift test
 
   lint:
