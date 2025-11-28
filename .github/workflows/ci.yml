@@ -36,9 +36,9 @@ jobs:
     - name: Create enabled_plugins file
       run: echo "[rabbitmq_stomp]." > enabled_plugins
     - name: Enable STOMP plugin
-      run: |
-        docker cp enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins
-        docker restart rabbitmq
+      uses: docker://docker
+      with:
+        args: docker cp enabled_plugins rabbitmq:/etc/rabbitmq/enabled_plugins && docker restart rabbitmq
     - name: Test
       env:
         STOMP_SERVER: rabbitmq
