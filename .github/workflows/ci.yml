@@ -24,15 +24,21 @@ jobs:
           - swift:6.2
     container:
       image: ${{ matrix.tag }}
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.1
+        options: --hostname rabbitmq --name rabbitmq
+        ports:
+          - 61613:61613
+        volumes:
+          - ${{ github.workspace }}/RabbitMQ/enabled_plugins:/etc/rabbitmq/enabled_plugins
     steps:
     - name: Checkout
       uses: actions/checkout@v6
-    - name: Start RabbitMQ
-      uses: namoshek/rabbitmq-github-action@v1
+    - name: Restart RabbitMQ
+      uses: docker://docker
       with:
-        ports: '61613:61613'
-        plugins: 'rabbitmq_stomp'
-        container-name: 'rabbitmq'
+        args: docker restart rabbitmq
     - name: Test
       env:
         RABBITMQ_SERVER: rabbitmq
