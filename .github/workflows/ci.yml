@@ -31,7 +31,7 @@ jobs:
         ports:
           - 61613:61613
         volumes:
-          - ${{ github.workspace }}/RabbitMQ/enabled_plugins:/etc/rabbitmq/enabled_plugins
+          - ${{ github.workspace }}/RabbitMQ/enabled_plugins:/etc/rabbitmq
     steps:
     - name: Checkout
       uses: actions/checkout@v6
