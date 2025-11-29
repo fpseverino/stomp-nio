@@ -6,16 +6,14 @@ on:
 jobs:
   linux:
     runs-on: ubuntu-latest
-    container:
-      image: swift:6.2
+    container: swift:noble
     steps:
-    - name: Checkout
+    - name: Check out code
       uses: actions/checkout@v6
       with:
         fetch-depth: 0
     # https://github.com/actions/checkout/issues/766
     - name: Mark the workspace as safe
-      run: git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: API breaking changes
-      run: |
-        swift package diagnose-api-breaking-changes origin/${GITHUB_BASE_REF}
+      run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+    - name: Run API breakage check
+      run: swift package diagnose-api-breaking-changes origin/${GITHUB_BASE_REF}

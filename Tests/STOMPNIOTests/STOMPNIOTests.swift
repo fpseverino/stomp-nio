@@ -1,3 +1,4 @@
+import Foundation
 import Logging
 import NIOCore
 import Testing
@@ -6,12 +7,14 @@ import Testing
 
 @Suite("STOMP NIO Tests")
 struct STOMPNIOTests {
+    static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
+
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
         try await withThrowingTaskGroup { group in
             group.addTask {
                 try await STOMPConnection.withConnection(
-                    host: "localhost",
+                    host: Self.hostname,
                     port: 61613,
                     logger: self.subscriberLogger
                 ) { connection in
@@ -26,7 +29,7 @@ struct STOMPNIOTests {
 
             group.addTask {
                 try await STOMPConnection.withConnection(
-                    host: "localhost",
+                    host: Self.hostname,
                     port: 61613,
                     logger: self.publisherLogger
                 ) { connection in
@@ -53,7 +56,7 @@ struct STOMPNIOTests {
     func wrongCredentials() async throws {
         await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
             _ = try await STOMPConnection.withConnection(
-                host: "localhost",
+                host: Self.hostname,
                 port: 61613,
                 configuration: .init(
                     authentication: .init(login: "wrong-user", passcode: "wrong-pass")
@@ -66,7 +69,7 @@ struct STOMPNIOTests {
     @Test
     func execute() async throws {
         try await STOMPConnection.withConnection(
-            host: "localhost",
+            host: Self.hostname,
             port: 61613,
             logger: self.subscriberLogger
         ) { connection in
