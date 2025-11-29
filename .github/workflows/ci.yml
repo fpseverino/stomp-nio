@@ -30,8 +30,6 @@ jobs:
         options: --hostname rabbitmq
         ports:
           - 61613:61613
-        volumes:
-          - ${{ github.workspace }}/RabbitMQ/enabled_plugins:/etc/rabbitmq/enabled_plugins
     steps:
     - name: Checkout
       uses: actions/checkout@v6
@@ -41,6 +39,10 @@ jobs:
       uses: docker://docker
       with:
         args: docker container ls
+    - name: Copy enabled_plugins file to RabbitMQ container
+      uses: docker://docker
+      with:
+        args: docker cp enabled_plugins $(docker ps -qf "ancestor=rabbitmq:4.2.1"):/etc/rabbitmq/enabled_plugins
     - name: Restart RabbitMQ
       uses: docker://docker
       with:
