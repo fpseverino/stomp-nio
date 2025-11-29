@@ -55,6 +55,8 @@ jobs:
         volumes:
           - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
     steps:
+    - name: Install curl
+      run: apt-get update -yq && apt-get install -y curl
     - name: Check out code
       uses: actions/checkout@v6
     - name: Restart RabbitMQ
