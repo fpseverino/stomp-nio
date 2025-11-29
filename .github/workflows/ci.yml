@@ -15,6 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  macos-unit:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.1
+        options: --hostname rabbitmq --name rabbitmq
+        ports:
+          - 61613:61613
+        volumes:
+          - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Restart RabbitMQ
+      uses: docker://docker
+      with:
+        args: docker restart rabbitmq
+    - name: Test
+      env:
+        RABBITMQ_SERVER: rabbitmq
+      run: swift test
+
   linux-unit:
     runs-on: ubuntu-latest
     timeout-minutes: 15
