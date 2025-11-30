@@ -11,7 +11,7 @@ struct STOMPNIOTests {
 
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
-        try await withThrowingTaskGroup { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await STOMPConnection.withConnection(
                     host: Self.hostname,
