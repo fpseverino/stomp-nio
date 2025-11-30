@@ -191,18 +191,15 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    private func sendFrame(
+    @usableFromInline
+    func sendFrame(
         _ frame: STOMPFrame,
         promise: STOMPPromise<STOMPFrame>,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) {
         self.eventLoop.assertInEventLoop()
 
-        let task = STOMPTask(
-            promise: promise,
-            checkInbound: checkInbound
-        )
-
+        let task = STOMPTask(promise: promise, checkInbound: checkInbound)
         switch self.stateMachine.sendFrame(task) {
         case .sendFrame(let context):
             _ = context.channel.writeAndFlush(frame)
@@ -211,17 +208,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }
     }
 
-    @usableFromInline
-    func sendFrame(
-        _ frame: STOMPFrame,
-        checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
-    ) async throws -> STOMPFrame {
-        try await withCheckedThrowingContinuation { continuation in
-            self.sendFrame(frame, promise: .swift(continuation), checkInbound: checkInbound)
-        }
-    }
-
-    func sendFrame(
+    private func sendFrame(
         _ frame: STOMPFrame,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) -> EventLoopFuture<STOMPFrame> {

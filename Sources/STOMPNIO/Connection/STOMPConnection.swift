@@ -169,6 +169,16 @@ public final actor STOMPConnection: Sendable {
         return stompChannelHandler
     }
 
+    @usableFromInline
+    func sendFrame(
+        _ frame: STOMPFrame,
+        checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
+    ) async throws -> STOMPFrame {
+        try await withCheckedThrowingContinuation { continuation in
+            self.channelHandler.sendFrame(frame, promise: .swift(continuation), checkInbound: checkInbound)
+        }
+    }
+
     /// Send a STOMP frame to the server.
     ///
     /// If the frame contains a `receipt` header, this method waits for the corresponding `RECEIPT` frame from the server and returns it.
@@ -184,7 +194,7 @@ public final actor STOMPConnection: Sendable {
             return nil
         }
 
-        return try await self.channelHandler.sendFrame(frame) { newFrame in
+        return try await self.sendFrame(frame) { newFrame in
             newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == frame.headers.first(where: { $0.name == "receipt" })?.value
         }
     }
