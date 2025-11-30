@@ -16,7 +16,12 @@ concurrency:
 
 jobs:
   macos-unit:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        macos-version:
+          - macos-15
+          - macos-26
+    runs-on: ${{ matrix.macos-version }}
     timeout-minutes: 15
     steps:
     - name: Select appropriate Xcode version
@@ -43,6 +48,8 @@ jobs:
     strategy:
       matrix:
         tag:
+          - swift:6.0
+          - swift:6.1
           - swift:6.2
     container:
       image: ${{ matrix.tag }}
