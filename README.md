@@ -9,5 +9,30 @@ A Swift NIO based STOMP v1.0, v1.1 and v1.2 client.
 
 > Heavily inspired by [Adam Fowler](https://github.com/adam-fowler)'s work on [MQTT NIO](https://github.com/swift-server-community/mqtt-nio) and [valkey-swift](https://github.com/valkey-io/valkey-swift).
 
-**Simple (or Streaming) Text Oriented Message Protocol** (**STOMP**) is a simple interoperable protocol designed for asynchronous message passing between clients via mediating servers. It defines a text based wire-format for messages passed between these clients and servers.
+**Simple (or Streaming) Text Oriented Message Protocol** ([**STOMP**](https://stomp.github.io)) is a simple interoperable protocol designed for asynchronous message passing between clients via mediating servers.
+It defines a text based wire-format for messages passed between these clients and servers.
 STOMP has been in active use for several years and is supported by many message brokers and client libraries.
+
+## Overview
+
+You can create a connection to a STOMP broker and send and receive messages from it using `STOMPConnection.withConnection`.
+
+```swift
+try await STOMPConnection.withConnection(host: "localhost", port: 61613, logger: logger) { connection in
+    try await connection.send(ByteBuffer(string: "Hello, STOMP over NIO!"), to: "/queue/a")
+}
+```
+
+```swift
+try await STOMPConnection.withConnection(host: "localhost", port: 61613, logger: logger) { connection in
+    try await connection.subscribe(to: "/queue/a") { subscription in
+        for try await frame in subscription {
+            print(String(buffer: frame.body))
+        }
+    }
+}
+```
+
+## Documentation
+
+User guides and reference documentation for STOMP NIO can be found on the [Swift Package Index](https://swiftpackageindex.com/fpseverino/stomp-nio/documentation).
