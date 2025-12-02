@@ -47,7 +47,7 @@ struct STOMPConnectionTests {
             _ = try await STOMPConnection.withConnection(
                 host: "invalid-host",
                 port: 12345,
-                logger: self.publisherLogger
+                logger: self.logger
             ) { _ in }
         }
     }
@@ -61,7 +61,7 @@ struct STOMPConnectionTests {
                 configuration: .init(
                     authentication: .init(login: "wrong-user", passcode: "wrong-pass")
                 ),
-                logger: self.publisherLogger
+                logger: self.logger
             ) { _ in }
         }
     }
@@ -71,23 +71,65 @@ struct STOMPConnectionTests {
         try await STOMPConnection.withConnection(
             host: Self.hostname,
             port: 61613,
-            logger: self.subscriberLogger
+            logger: self.logger
         ) { connection in
-            let subscribeFrame = STOMPFrame(
-                command: .subscribe,
+            let frame = STOMPFrame(
+                command: .send,
                 headers: [
-                    STOMPHeader(name: "destination", value: "destination"),
-                    STOMPHeader(name: "id", value: "id"),
-                    STOMPHeader(name: "ack", value: STOMPAckMode.auto.rawValue),
-                    STOMPHeader(name: "receipt", value: "77"),
-                ]
+                    STOMPHeader(name: "destination", value: "/queue/test"),
+                    STOMPHeader(name: "content-type", value: "text/plain"),
+                    STOMPHeader(name: "receipt", value: "sendFrame"),
+                ],
+                body: ByteBuffer(string: "Test Message")
             )
 
-            let receiptFrame = try await connection.send(frame: subscribeFrame)
+            let receiptFrame = try await connection.send(frame: frame)
             #expect(receiptFrame != nil)
             #expect(receiptFrame?.command == .receipt)
         }
     }
+
+    @Test("CONNECTED Timeout")
+    func connectedTimeout() async throws {
+        await #expect(throws: STOMPClientError.timeout) {
+            try await STOMPConnection.withConnection(
+                host: Self.hostname,
+                port: 61613,
+                configuration: .init(connectTimeout: .milliseconds(1)),
+                logger: self.logger
+            ) { _ in }
+        }
+    }
+
+    @Test("RECEIPT Timeout")
+    func receiptTimeout() async throws {
+        try await STOMPConnection.withConnection(
+            host: Self.hostname,
+            port: 61613,
+            configuration: .init(receiptTimeout: .nanoseconds(1)),
+            logger: self.logger
+        ) { connection in
+            let frame = STOMPFrame(
+                command: .send,
+                headers: [
+                    STOMPHeader(name: "destination", value: "/queue/test"),
+                    STOMPHeader(name: "content-type", value: "text/plain"),
+                    STOMPHeader(name: "receipt", value: "sendFrame"),
+                ],
+                body: ByteBuffer(string: "Test Message")
+            )
+
+            await #expect(throws: STOMPClientError.timeout) {
+                _ = try await connection.send(frame: frame)
+            }
+        }
+    }
+
+    let logger: Logger = {
+        var logger = Logger(label: "STOMPConnectionTests")
+        logger.logLevel = .trace
+        return logger
+    }()
 
     let subscriberLogger: Logger = {
         var logger = Logger(label: "Subscriber")

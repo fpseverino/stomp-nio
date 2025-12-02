@@ -14,6 +14,8 @@ public struct STOMPClientError: Error, Sendable, Equatable {
             case cancelledTask
             /// An expected header is missing from a frame
             case missingHeader
+            /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
+            case timeout
         }
 
         let base: Base
@@ -34,6 +36,8 @@ public struct STOMPClientError: Error, Sendable, Equatable {
         public static let cancelledTask = Self(.cancelledTask)
         /// An expected header is missing from a frame
         public static let missingHeader = Self(.missingHeader)
+        /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
+        public static let timeout = Self(.timeout)
 
         public var description: String {
             self.base.rawValue
@@ -107,6 +111,9 @@ public struct STOMPClientError: Error, Sendable, Equatable {
     public static func missingHeader(message: String) -> Self {
         .init(backing: .init(errorType: .missingHeader, message: message))
     }
+
+    /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
+    public static let timeout = Self(errorType: .timeout)
 
     public static func == (lhs: STOMPClientError, rhs: STOMPClientError) -> Bool {
         lhs.backing == rhs.backing

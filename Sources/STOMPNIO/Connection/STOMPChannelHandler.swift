@@ -13,6 +13,33 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     struct Configuration {
         let authentication: STOMPConnectionConfiguration.Authentication?
         let virtualHost: String?
+        @usableFromInline
+        let connectTimeout: TimeAmount
+        @usableFromInline
+        let receiptTimeout: TimeAmount
+    }
+
+    struct STOMPDeadlineSchedule: NIOScheduledCallbackHandler {
+        let channelHandler: NIOLoopBound<STOMPChannelHandler>
+    
+        func handleScheduledCallback(eventLoop: some NIOCore.EventLoop) {
+            let channelHandler = self.channelHandler.value
+            switch channelHandler.stateMachine.hitDeadline(now: .now()) {
+            case .failTasksAndClose(let context, let commands):
+                let error = STOMPClientError.timeout
+                for command in commands {
+                    command.promise.fail(error)
+                }
+                channelHandler.failTasksAndCloseSubscriptions(with: error)
+                context.fireErrorCaught(error)
+                context.close(promise: nil)
+            case .reschedule(let deadline):
+                channelHandler.scheduleDeadlineCallback(deadline: deadline)
+            case .clearCallback:
+                channelHandler.deadlineCallback = nil
+                break
+            }
+        }
     }
 
     @usableFromInline
@@ -30,6 +57,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     var stateMachine: StateMachine<ChannelHandlerContext>
     @usableFromInline
     var subscriptions: STOMPSubscriptions
+
+    @usableFromInline
+    private(set) var deadlineCallback: NIOScheduledCallback?
 
     private var decoder: NIOSingleStepByteToMessageProcessor<STOMPFrameDecoder>
     private let logger: Logger
@@ -62,11 +92,13 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
         let promise = self.eventLoop.makePromise(of: STOMPFrame.self)
 
+        let deadline = .now() + self.configuration.connectTimeout
         context.writeAndFlush(self.wrapOutboundOut(buffer), promise: nil)
+        self.scheduleDeadlineCallback(deadline: deadline)
 
         self.stateMachine.setInitialized(
             context: context,
-            connectTask: .init(promise: .nio(promise)) { $0.command == .connected }
+            connectTask: .init(promise: .nio(promise), deadline: deadline) { $0.command == .connected }
         )
     }
 
@@ -142,7 +174,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         self.logger.trace("Received STOMP message: \(frame.command.rawValue)")
 
         switch self.stateMachine.receivedFrame(frame) {
-        case .succeedTask(let task):
+        case .succeedTask(let task, let deadlineAction):
+            self.processDeadlineCallbackAction(action: deadlineAction)
             task.promise.succeed(frame)
         case .failTask(let task, let error):
             task.promise.fail(error)
@@ -182,6 +215,26 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }
     }
 
+    @usableFromInline
+    func scheduleDeadlineCallback(deadline: NIODeadline) {
+        self.deadlineCallback = try? self.eventLoop.scheduleCallback(
+            at: deadline,
+            handler: STOMPDeadlineSchedule(channelHandler: .init(self, eventLoop: self.eventLoop))
+        )
+    }
+
+    func processDeadlineCallbackAction(action: StateMachine<ChannelHandlerContext>.DeadlineCallbackAction) {
+        switch action {
+        case .cancel:
+            self.deadlineCallback?.cancel()
+            self.deadlineCallback = nil
+        case .reschedule(let deadline):
+            self.scheduleDeadlineCallback(deadline: deadline)
+        case .doNothing:
+            break
+        }
+    }
+
     private func failTasksAndCloseSubscriptions(with error: any Error) {
         switch self.stateMachine.close() {
         case .failTasksAndClose(let tasks):
@@ -189,6 +242,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 task.promise.fail(error)
             }
             self.subscriptions.close(error: error)
+            self.deadlineCallback?.cancel()
         case .doNothing:
             break
         }
@@ -201,11 +255,14 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) {
         self.eventLoop.assertInEventLoop()
-
-        let task = STOMPTask(promise: promise, checkInbound: checkInbound)
+        let deadline = .now() + self.configuration.receiptTimeout
+        let task = STOMPTask(promise: promise, deadline: deadline, checkInbound: checkInbound)
         switch self.stateMachine.sendFrame(task) {
         case .sendFrame(let context):
             _ = context.channel.writeAndFlush(frame)
+            if self.deadlineCallback == nil {
+                self.scheduleDeadlineCallback(deadline: deadline)
+            }
         case .throwError(let error):
             task.promise.fail(error)
         }
@@ -293,7 +350,9 @@ extension STOMPChannelHandler.Configuration {
     init(_ other: STOMPConnectionConfiguration) {
         self.init(
             authentication: other.authentication,
-            virtualHost: other.virtualHost
+            virtualHost: other.virtualHost,
+            connectTimeout: .init(other.connectTimeout),
+            receiptTimeout: .init(other.receiptTimeout)
         )
     }
 }

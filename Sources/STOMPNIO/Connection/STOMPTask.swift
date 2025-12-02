@@ -33,12 +33,15 @@ enum STOMPPromise<T: Sendable>: Sendable {
 final class STOMPTask: Sendable {
     let promise: STOMPPromise<STOMPFrame>
     let checkInbound: @Sendable (STOMPFrame) throws -> Bool
+    let deadline: NIODeadline
 
     init(
         promise: STOMPPromise<STOMPFrame>,
+        deadline: NIODeadline,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) {
         self.promise = promise
         self.checkInbound = checkInbound
+        self.deadline = deadline
     }
 }
