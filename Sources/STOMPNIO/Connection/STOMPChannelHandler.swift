@@ -21,7 +21,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
     struct STOMPDeadlineSchedule: NIOScheduledCallbackHandler {
         let channelHandler: NIOLoopBound<STOMPChannelHandler>
-    
+
         func handleScheduledCallback(eventLoop: some NIOCore.EventLoop) {
             let channelHandler = self.channelHandler.value
             switch channelHandler.stateMachine.hitDeadline(now: .now()) {
