@@ -86,12 +86,14 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func handlerAdded(context: ChannelHandlerContext) {
         if context.channel.isActive {
             self.setInitialized(context: context)
+            self.logger.trace("STOMPChannelHandler added when channel is active.")
         }
     }
 
     @usableFromInline
     func channelActive(context: ChannelHandlerContext) {
         self.setInitialized(context: context)
+        self.logger.trace("Channel active.")
         context.fireChannelActive()
     }
 
@@ -99,6 +101,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func channelInactive(context: ChannelHandlerContext) {
         // channel is inactive so we should fail all tasks in progress
         self.failTasksAndCloseSubscriptions(with: STOMPClientError.connectionClosed)
+        self.logger.trace("Channel inactive.")
         context.fireChannelInactive()
     }
 
@@ -125,7 +128,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 self.handleFrame(context: context, frame: frame)
             }
         } catch let error as STOMPFrameDecoder.ParseError {
-            self.logger.debug("STOMPCommandHandler: ERROR", metadata: ["error": "\(error)"])
+            self.logger.debug("STOMPChannelHandler: ERROR", metadata: ["error": "\(error)"])
 
             self.failTasksAndCloseSubscriptions(with: error)
             context.fireErrorCaught(error)

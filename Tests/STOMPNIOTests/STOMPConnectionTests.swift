@@ -5,8 +5,8 @@ import Testing
 
 @testable import STOMPNIO
 
-@Suite("STOMP NIO Tests")
-struct STOMPNIOTests {
+@Suite("STOMPConnection Tests")
+struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
@@ -41,7 +41,7 @@ struct STOMPNIOTests {
         }
     }
 
-    @Test("Wrong Host and Port")
+    @Test("Connect with Wrong Host and Port")
     func wrongHostAndPort() async throws {
         await #expect(throws: (any Error).self) {
             _ = try await STOMPConnection.withConnection(
@@ -52,7 +52,7 @@ struct STOMPNIOTests {
         }
     }
 
-    @Test("Wrong Credentials")
+    @Test("Connect with Wrong Credentials")
     func wrongCredentials() async throws {
         await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
             _ = try await STOMPConnection.withConnection(
@@ -66,8 +66,8 @@ struct STOMPNIOTests {
         }
     }
 
-    @Test
-    func execute() async throws {
+    @Test("Send Frame")
+    func sendFrame() async throws {
         try await STOMPConnection.withConnection(
             host: Self.hostname,
             port: 61613,
@@ -83,7 +83,7 @@ struct STOMPNIOTests {
                 ]
             )
 
-            let receiptFrame = try await connection.execute(frame: subscribeFrame)
+            let receiptFrame = try await connection.send(frame: subscribeFrame)
             #expect(receiptFrame != nil)
             #expect(receiptFrame?.command == .receipt)
         }

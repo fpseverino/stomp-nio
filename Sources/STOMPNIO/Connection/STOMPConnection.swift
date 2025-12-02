@@ -188,7 +188,7 @@ public final actor STOMPConnection: Sendable {
     ///
     /// - Returns: The `RECEIPT` frame from the server if the sent frame contained a `receipt` header, otherwise `nil`
     @inlinable
-    public func execute(frame: STOMPFrame) async throws -> STOMPFrame? {
+    public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
         guard frame.headers.contains(where: { $0.name == "receipt" }) else {
             try await self.channel.writeAndFlush(frame)
             return nil
@@ -219,7 +219,7 @@ public final actor STOMPConnection: Sendable {
                 STOMPHeader(name: "content-type", value: contentType),
                 STOMPHeader(name: "receipt", value: UUID().uuidString),
             ]
-        _ = try await self.execute(frame: STOMPFrame(command: .send, headers: headers, body: body))
+        _ = try await self.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
     }
 
     /// Subscribe to a destination.
