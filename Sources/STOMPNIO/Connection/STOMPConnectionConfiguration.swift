@@ -36,6 +36,21 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// > Note: If not set, no "host" header will be sent in the CONNECT frame.
     public var virtualHost: String?
 
+    /// The maximum time to wait for the CONNECTED frame after sending the CONNECT frame.
+    ///
+    /// If the timeout is reached without receiving a CONNECTED frame,
+    /// the connection attempt will fail with a timeout error.
+    ///
+    /// Default value is 10 seconds.
+    public var connectTimeout: Duration
+
+    /// The maximum time to wait for a RECEIPT frame before considering the connection dead.
+    ///
+    /// This timeout applies to all frames with a receipt header sent to the STOMP broker.
+    ///
+    /// Default value is 30 seconds.
+    public var receiptTimeout: Duration
+
     /// Creates a new STOMP connection configuration.
     ///
     /// Use this initializer to create a configuration object
@@ -44,8 +59,17 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// - Parameters:
     ///   - authentication: Optional credentials for accessing the STOMP server. Set to `nil` for unauthenticated access.
     ///   - virtualHost: The name of a virtual host that the client wishes to connect to.
-    public init(authentication: Authentication? = nil, virtualHost: String? = nil) {
+    ///   - connectTimeout: Maximum time to wait for the CONNECTED frame. Defaults to 10 seconds.
+    ///   - receiptTimeout: Maximum time to wait for a RECEIPT frame. Defaults to 30 seconds.
+    public init(
+        authentication: Authentication? = nil,
+        virtualHost: String? = nil,
+        connectTimeout: Duration = .seconds(10),
+        receiptTimeout: Duration = .seconds(30)
+    ) {
         self.authentication = authentication
         self.virtualHost = virtualHost
+        self.connectTimeout = connectTimeout
+        self.receiptTimeout = receiptTimeout
     }
 }

@@ -8,7 +8,7 @@ extension STOMPChannelHandler {
             case uninitialized
             case initialized(InitializedState)
             case connected(ConnectedState)
-            case closed
+            case closed((any Error)?)
 
             @usableFromInline
             var description: String {
@@ -78,16 +78,23 @@ extension STOMPChannelHandler {
                 state.tasks.append(task)
                 self = .connected(state)
                 return .sendFrame(state.context)
-            case .closed:
-                self = .closed
+            case .closed(let error):
+                self = .closed(error)
                 return .throwError(STOMPClientError.connectionClosed)
             }
         }
 
         @usableFromInline
+        enum DeadlineCallbackAction {
+            case cancel
+            case reschedule(NIODeadline)
+            case doNothing
+        }
+
+        @usableFromInline
         enum ReceivedFrameAction {
             case messageReceived
-            case succeedTask(STOMPTask)
+            case succeedTask(STOMPTask, DeadlineCallbackAction)
             case failTask(STOMPTask, any Error)
             case unhandledTask
             case closeConnection(any Error)
@@ -102,17 +109,17 @@ extension STOMPChannelHandler {
                 switch frame.command {
                 case .connected:
                     self = .connected(.init(context: state.context, tasks: []))
-                    return .succeedTask(state.connectTask)
+                    return .succeedTask(state.connectTask, .cancel)
                 case .error:
                     let error = STOMPClientError.errorFrame(
                         message: frame.headers.first(where: { $0.name == "message" })?.value,
                         body: String(buffer: frame.body)
                     )
-                    self = .closed
+                    self = .closed(error)
                     return .failTask(state.connectTask, error)
                 default:
                     let error = STOMPClientError.unsolicitedFrame(message: "Received unexpected frame: \(frame.command)")
-                    self = .closed
+                    self = .closed(error)
                     return .failTask(state.connectTask, error)
                 }
             case .connected(var state):
@@ -126,7 +133,17 @@ extension STOMPChannelHandler {
                             if try task.checkInbound(frame) {
                                 state.tasks.removeAll { $0 === task }
                                 self = .connected(state)
-                                return .succeedTask(task)
+                                let deadlineCallback: DeadlineCallbackAction =
+                                    if state.tasks.isEmpty {
+                                        .cancel
+                                    } else {
+                                        if let earliestDeadline = state.tasks.map({ $0.deadline }).min() {
+                                            .reschedule(earliestDeadline)
+                                        } else {
+                                            .doNothing
+                                        }
+                                    }
+                                return .succeedTask(task, deadlineCallback)
                             }
                         } catch {
                             state.tasks.removeAll { $0 === task }
@@ -148,8 +165,12 @@ extension STOMPChannelHandler {
                     self = .connected(state)
                     return .closeConnection(error)
                 }
-            case .closed:
-                preconditionFailure("Cannot receive frame when closed")
+            case .closed(let error):
+                guard let error else {
+                    preconditionFailure("Cannot receive frame on closed connection with no error")
+                }
+                self = .closed(error)
+                return .closeConnection(error)
             }
         }
 
@@ -175,9 +196,48 @@ extension STOMPChannelHandler {
             case .connected(let state):
                 self = .connected(state)
                 return .done
-            case .closed:
-                self = .closed
-                return .reportedClosed(nil)
+            case .closed(let error):
+                self = .closed(error)
+                return .reportedClosed(error)
+            }
+        }
+
+        @usableFromInline
+        enum HitDeadlineAction {
+            case failTasksAndClose(Context, [STOMPTask])
+            case reschedule(NIODeadline)
+            case clearCallback
+        }
+
+        @usableFromInline
+        mutating func hitDeadline(now: NIODeadline) -> HitDeadlineAction {
+            switch consume self.state {
+            case .uninitialized:
+                preconditionFailure("Cannot cancel when uninitialized")
+            case .initialized(let state):
+                if state.connectTask.deadline <= now {
+                    self = .closed(STOMPClientError.timeout)
+                    return .failTasksAndClose(state.context, [state.connectTask])
+                } else {
+                    self = .initialized(state)
+                    return .reschedule(state.connectTask.deadline)
+                }
+            case .connected(let state):
+                if let earliestDeadline = state.tasks.map({ $0.deadline }).min() {
+                    if earliestDeadline <= now {
+                        self = .closed(STOMPClientError.timeout)
+                        return .failTasksAndClose(state.context, state.tasks)
+                    } else {
+                        self = .connected(state)
+                        return .reschedule(earliestDeadline)
+                    }
+                } else {
+                    self = .connected(state)
+                    return .clearCallback
+                }
+            case .closed(let error):
+                self = .closed(error)
+                return .clearCallback
             }
         }
 
@@ -192,16 +252,16 @@ extension STOMPChannelHandler {
         mutating func close() -> CloseAction {
             switch consume self.state {
             case .uninitialized:
-                self = .closed
+                self = .closed(nil)
                 return .doNothing
             case .initialized(let state):
-                self = .closed
+                self = .closed(nil)
                 return .failTasksAndClose([state.connectTask])
             case .connected(let state):
-                self = .closed
+                self = .closed(nil)
                 return .failTasksAndClose(state.tasks)
-            case .closed:
-                self = .closed
+            case .closed(let error):
+                self = .closed(error)
                 return .doNothing
             }
         }
@@ -218,8 +278,8 @@ extension STOMPChannelHandler {
             StateMachine(.connected(state))
         }
 
-        private static var closed: Self {
-            StateMachine(.closed)
+        private static func closed(_ error: (any Error)?) -> Self {
+            StateMachine(.closed(error))
         }
     }
 }
