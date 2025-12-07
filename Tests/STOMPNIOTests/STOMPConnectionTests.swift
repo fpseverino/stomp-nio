@@ -1,3 +1,4 @@
+import Configuration
 import Foundation
 import Logging
 import NIOCore
@@ -177,6 +178,30 @@ struct STOMPConnectionTests {
         }
     }
     #endif
+
+    @Test("Configuration from ConfigReader")
+    func configReader() async throws {
+        let config = ConfigReader(
+            provider: InMemoryProvider(
+                values: [
+                    "stomp.auth.login": "guest",
+                    "stomp.auth.passcode": "guest",
+                    "stomp.virtualHost": "/",
+                    "stomp.connectTimeout": 15,
+                    "stomp.receiptTimeout": 45,
+                ]
+            )
+        )
+
+        try await STOMPConnection.withConnection(
+            host: Self.hostname,
+            port: 61613,
+            configuration: .init(config: config),
+            logger: self.logger
+        ) { connection in
+            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+        }
+    }
 
     let logger: Logger = {
         var logger = Logger(label: "STOMPConnectionTests")
