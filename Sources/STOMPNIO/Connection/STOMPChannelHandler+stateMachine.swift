@@ -8,6 +8,7 @@ extension STOMPChannelHandler {
             case uninitialized
             case initialized(InitializedState)
             case connected(ConnectedState)
+            case closing(ConnectedState)
             case closed((any Error)?)
 
             @usableFromInline
@@ -17,6 +18,7 @@ extension STOMPChannelHandler {
                     case .uninitialized: "uninitialized"
                     case .initialized: "initialized"
                     case .connected: "connected"
+                    case .closing: "closing"
                     case .closed: "closed"
                     }
                 }
@@ -55,6 +57,8 @@ extension STOMPChannelHandler {
                 preconditionFailure("Cannot set initialized state when state is initialized")
             case .connected:
                 preconditionFailure("Cannot set initialized state when state is connected")
+            case .closing:
+                preconditionFailure("Cannot set initialized state when state is closing")
             case .closed:
                 preconditionFailure("Cannot set initialized state when state is closed")
             }
@@ -78,6 +82,9 @@ extension STOMPChannelHandler {
                 state.tasks.append(task)
                 self = .connected(state)
                 return .sendFrame(state.context)
+            case .closing(let state):
+                self = .closing(state)
+                return .throwError(STOMPClientError.connectionClosing)
             case .closed(let error):
                 self = .closed(error)
                 return .throwError(STOMPClientError.connectionClosed)
@@ -165,6 +172,62 @@ extension STOMPChannelHandler {
                     self = .connected(state)
                     return .closeConnection(error)
                 }
+            case .closing(var state):
+                guard !state.tasks.isEmpty else {
+                    preconditionFailure("Cannot be in closing state with no active tasks")
+                }
+                switch frame.command {
+                case .message:
+                    self = .closing(state)
+                    return .messageReceived
+                case .receipt:
+                    for task in state.tasks {
+                        do {
+                            if try task.checkInbound(frame) {
+                                state.tasks.removeAll { $0 === task }
+                                if state.tasks.isEmpty {
+                                    self = .closed(nil)
+                                    return .succeedTask(task, .cancel)
+                                } else {
+                                    self = .closing(state)
+                                    let deadlineCallback: DeadlineCallbackAction =
+                                        if state.tasks.isEmpty {
+                                            .cancel
+                                        } else {
+                                            if let earliestDeadline = state.tasks.map({ $0.deadline }).min() {
+                                                .reschedule(earliestDeadline)
+                                            } else {
+                                                .doNothing
+                                            }
+                                        }
+                                    return .succeedTask(task, deadlineCallback)
+                                }
+                            }
+                        } catch {
+                            state.tasks.removeAll { $0 === task }
+                            if state.tasks.isEmpty {
+                                self = .closed(nil)
+                                return .failTask(task, error)
+                            } else {
+                                self = .closing(state)
+                                return .failTask(task, error)
+                            }
+                        }
+                    }
+                    self = .closing(state)
+                    return .unhandledTask
+                case .error:
+                    let error = STOMPClientError.errorFrame(
+                        message: frame.headers.first(where: { $0.name == "message" })?.value,
+                        body: String(buffer: frame.body)
+                    )
+                    self = .closed(error)
+                    return .closeConnection(error)
+                default:
+                    let error = STOMPClientError.unsolicitedFrame(message: "Received unexpected frame: \(frame.command)")
+                    self = .closed(error)
+                    return .closeConnection(error)
+                }
             case .closed(let error):
                 guard let error else {
                     preconditionFailure("Cannot receive frame on closed connection with no error")
@@ -196,6 +259,9 @@ extension STOMPChannelHandler {
             case .connected(let state):
                 self = .connected(state)
                 return .done
+            case .closing(let state):
+                self = .closing(state)
+                return .reportedClosed(nil)
             case .closed(let error):
                 self = .closed(error)
                 return .reportedClosed(error)
@@ -235,9 +301,57 @@ extension STOMPChannelHandler {
                     self = .connected(state)
                     return .clearCallback
                 }
+            case .closing(let state):
+                guard !state.tasks.isEmpty else {
+                    preconditionFailure("Cannot be in closing state with no active tasks")
+                }
+                if let earliestDeadline = state.tasks.map({ $0.deadline }).min() {
+                    if earliestDeadline <= now {
+                        self = .closed(STOMPClientError.timeout)
+                        return .failTasksAndClose(state.context, state.tasks)
+                    } else {
+                        self = .closing(state)
+                        return .reschedule(earliestDeadline)
+                    }
+                } else {
+                    self = .closed(nil)
+                    return .clearCallback
+                }
             case .closed(let error):
                 self = .closed(error)
                 return .clearCallback
+            }
+        }
+
+        @usableFromInline
+        enum TriggerGracefulShutdownAction {
+            case closeConnection(Context)
+            case doNothing
+        }
+        /// Want to gracefully shutdown the handler
+        @usableFromInline
+        mutating func triggerGracefulShutdown() -> TriggerGracefulShutdownAction {
+            switch consume self.state {
+            case .uninitialized:
+                self = .closed(nil)
+                return .doNothing
+            case .initialized(let state):
+                self = .closing(.init(context: state.context, tasks: [state.connectTask]))
+                return .doNothing
+            case .connected(let state):
+                if state.tasks.count > 0 {
+                    self = .closing(.init(context: state.context, tasks: state.tasks))
+                    return .doNothing
+                } else {
+                    self = .closed(nil)
+                    return .closeConnection(state.context)
+                }
+            case .closing(let state):
+                self = .closing(state)
+                return .doNothing
+            case .closed(let error):
+                self = .closed(error)
+                return .doNothing
             }
         }
 
@@ -260,6 +374,9 @@ extension STOMPChannelHandler {
             case .connected(let state):
                 self = .closed(nil)
                 return .failTasksAndClose(state.tasks)
+            case .closing(let state):
+                self = .closed(nil)
+                return .failTasksAndClose(state.tasks)
             case .closed(let error):
                 self = .closed(error)
                 return .doNothing
@@ -276,6 +393,10 @@ extension STOMPChannelHandler {
 
         private static func connected(_ state: ConnectedState) -> Self {
             StateMachine(.connected(state))
+        }
+
+        private static func closing(_ state: ConnectedState) -> Self {
+            StateMachine(.closing(state))
         }
 
         private static func closed(_ error: (any Error)?) -> Self {

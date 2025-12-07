@@ -248,6 +248,15 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }
     }
 
+    func triggerGracefulShutdown() {
+        switch self.stateMachine.triggerGracefulShutdown() {
+        case .closeConnection(let context):
+            context.close(mode: .all, promise: nil)
+        case .doNothing:
+            break
+        }
+    }
+
     @usableFromInline
     func sendFrame(
         _ frame: STOMPFrame,
