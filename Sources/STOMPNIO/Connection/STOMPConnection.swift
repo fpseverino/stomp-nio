@@ -287,4 +287,19 @@ public final actor STOMPConnection: Sendable {
             self.channelHandler.unsubscribe(id: id, userDefinedHeaders: userDefinedHeaders, promise: .swift(continuation))
         }
     }
+
+    /// Trigger a graceful shutdown of the STOMP connection.
+    ///
+    /// This method sends a `DISCONNECT` frame to the STOMP server and waits for the `RECEIPT` frame,
+    /// assuring that all previous frames have been received by the server.
+    ///
+    /// > Note: if the server closes its end of the socket too quickly,
+    /// the client might never receive the expected `RECEIPT` frame.
+    /// See the [Connection Lingering](https://stomp.github.io/stomp-specification-1.2.html#Connection_Lingering) section for more information.
+    ///
+    /// > Warning: Clients MUST NOT send any more frames after this method is called.
+    public func triggerGracefulShutdown() async throws {
+        _ = try await self.send(frame: .init(command: .disconnect, headers: [.init(name: "receipt", value: UUID().uuidString)]))
+        self.channelHandler.triggerGracefulShutdown()
+    }
 }

@@ -125,6 +125,31 @@ struct STOMPConnectionTests {
         }
     }
 
+    @Test("Graceful Shutdown")
+    func gracefulShutdown() async throws {
+        try await STOMPConnection.withConnection(
+            host: Self.hostname,
+            port: 61613,
+            logger: self.logger
+        ) { connection in
+            try await connection.triggerGracefulShutdown()
+        }
+    }
+
+    @Test("Send after Graceful Shutdown")
+    func sendAfterGracefulShutdown() async throws {
+        try await STOMPConnection.withConnection(
+            host: Self.hostname,
+            port: 61613,
+            logger: self.logger
+        ) { connection in
+            try await connection.triggerGracefulShutdown()
+            await #expect(throws: STOMPClientError.connectionClosed) {
+                try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+            }
+        }
+    }
+
     let logger: Logger = {
         var logger = Logger(label: "STOMPConnectionTests")
         logger.logLevel = .trace
