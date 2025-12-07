@@ -14,8 +14,9 @@ let package = Package(
         .library(name: "STOMPNIO", targets: ["STOMPNIO"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.3"),
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.7.1"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.91.0"),
+        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.26.0"),
         .package(url: "https://github.com/apple/swift-configuration", exact: "1.0.0-alpha.1"),
     ],
     targets: [
@@ -25,6 +26,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
                 .product(name: "Configuration", package: "swift-configuration"),
             ],
             swiftSettings: swiftSettings

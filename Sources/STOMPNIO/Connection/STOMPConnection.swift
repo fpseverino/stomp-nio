@@ -3,6 +3,11 @@ public import NIOCore
 public import NIOPosix
 import Synchronization
 
+#if canImport(Network)
+import Network
+import NIOTransportServices
+#endif
+
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -124,7 +129,20 @@ public final actor STOMPConnection: Sendable {
         eventLoop.assertInEventLoop()
 
         let bootstrap: any NIOClientTCPBootstrapProtocol
-        bootstrap = ClientBootstrap(group: eventLoop)
+        #if canImport(Network)
+        if let tsBootstrap = createTSBootstrap(eventLoopGroup: eventLoop, tlsOptions: nil) {
+            bootstrap = tsBootstrap
+        } else {
+            #if os(iOS) || os(tvOS)
+            logger.warning(
+                "Running BSD sockets on iOS or tvOS is not recommended. Please use NIOTSEventLoopGroup, to run with the Network framework"
+            )
+            #endif
+            bootstrap = self.createSocketsBootstrap(eventLoopGroup: eventLoop)
+        }
+        #else
+        bootstrap = self.createSocketsBootstrap(eventLoopGroup: eventLoop)
+        #endif
 
         let connect = bootstrap.channelInitializer { channel in
             do {
@@ -168,6 +186,29 @@ public final actor STOMPConnection: Sendable {
         try sync.addHandler(stompChannelHandler)
         return stompChannelHandler
     }
+
+    /// Create a BSD sockets based bootstrap
+    private static func createSocketsBootstrap(eventLoopGroup: any EventLoopGroup) -> ClientBootstrap {
+        ClientBootstrap(group: eventLoopGroup)
+    }
+
+    #if canImport(Network)
+    /// Create a NIOTransportServices bootstrap using Network.framework
+    private static func createTSBootstrap(
+        eventLoopGroup: any EventLoopGroup,
+        tlsOptions: NWProtocolTLS.Options?
+    ) -> NIOTSConnectionBootstrap? {
+        guard
+            let bootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoopGroup)
+        else {
+            return nil
+        }
+        if let tlsOptions {
+            return bootstrap.tlsOptions(tlsOptions)
+        }
+        return bootstrap
+    }
+    #endif
 
     @usableFromInline
     func sendFrame(
@@ -286,5 +327,20 @@ public final actor STOMPConnection: Sendable {
         try await withCheckedThrowingContinuation { continuation in
             self.channelHandler.unsubscribe(id: id, userDefinedHeaders: userDefinedHeaders, promise: .swift(continuation))
         }
+    }
+
+    /// Trigger a graceful shutdown of the STOMP connection.
+    ///
+    /// This method sends a `DISCONNECT` frame to the STOMP server and waits for the `RECEIPT` frame,
+    /// assuring that all previous frames have been received by the server.
+    ///
+    /// > Note: if the server closes its end of the socket too quickly,
+    /// the client might never receive the expected `RECEIPT` frame.
+    /// See the [Connection Lingering](https://stomp.github.io/stomp-specification-1.2.html#Connection_Lingering) section for more information.
+    ///
+    /// > Warning: Clients MUST NOT send any more frames after this method is called.
+    public func triggerGracefulShutdown() async throws {
+        _ = try await self.send(frame: .init(command: .disconnect, headers: [.init(name: "receipt", value: UUID().uuidString)]))
+        self.channelHandler.triggerGracefulShutdown()
     }
 }
