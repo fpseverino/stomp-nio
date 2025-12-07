@@ -1,9 +1,12 @@
 import Foundation
 import Logging
 import NIOCore
+import STOMPNIO
 import Testing
 
-@testable import STOMPNIO
+#if canImport(Network)
+import NIOTransportServices
+#endif
 
 @Suite("STOMPConnection Tests")
 struct STOMPConnectionTests {
@@ -149,6 +152,31 @@ struct STOMPConnectionTests {
             }
         }
     }
+
+    #if canImport(Network)
+    @Test("Connect with NIOTransportServices")
+    func nioTransportServices() async throws {
+        try await STOMPConnection.withConnection(
+            host: Self.hostname,
+            port: 61613,
+            eventLoop: NIOTSEventLoopGroup.singleton.any(),
+            logger: self.logger
+        ) { connection in
+            let frame = STOMPFrame(
+                command: .send,
+                headers: [
+                    STOMPHeader(name: "destination", value: "/queue/test"),
+                    STOMPHeader(name: "content-type", value: "text/plain"),
+                    STOMPHeader(name: "receipt", value: "nioTransportServicesConnection"),
+                ],
+                body: ByteBuffer(string: "Test Message")
+            )
+            let receiptFrame = try await connection.send(frame: frame)
+            #expect(receiptFrame != nil)
+            #expect(receiptFrame?.command == .receipt)
+        }
+    }
+    #endif
 
     let logger: Logger = {
         var logger = Logger(label: "STOMPConnectionTests")
