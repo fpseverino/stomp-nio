@@ -166,8 +166,7 @@ struct STOMPConnectionTests {
         )
 
         try await STOMPConnection.withConnection(
-            host: Self.hostname,
-            port: 61613,
+            address: .hostname(Self.hostname),
             configuration: .init(config: config),
             logger: self.logger
         ) { connection in
