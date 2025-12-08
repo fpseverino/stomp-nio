@@ -45,8 +45,7 @@ public final actor STOMPConnection: Sendable {
     /// Connect to the STOMP server and run operations using the connection, then it automatically closes the connection.
     ///
     /// - Parameters:
-    ///   - host: The hostname or IP address of the STOMP server
-    ///   - port: The port on which the STOMP server is listening
+    ///   - address: Internet address of the STOMP server
     ///   - configuration: Configuration for the STOMP connection
     ///   - eventLoop: EventLoop to run connection on
     ///   - logger: Logger to use for the connection
@@ -55,8 +54,7 @@ public final actor STOMPConnection: Sendable {
     ///
     /// - Returns: The value returned by the `operation` closure
     public static func withConnection<Value>(
-        host: String,
-        port: Int,
+        address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration = .init(),
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
         logger: Logger,
@@ -64,8 +62,7 @@ public final actor STOMPConnection: Sendable {
         operation: (STOMPConnection) async throws -> sending Value
     ) async throws -> sending Value {
         let connection = try await self.connect(
-            host: host,
-            port: port,
+            address: address,
             configuration: configuration,
             eventLoop: eventLoop,
             logger: logger
@@ -75,8 +72,7 @@ public final actor STOMPConnection: Sendable {
     }
 
     static func connect(
-        host: String,
-        port: Int,
+        address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration,
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
         logger: Logger
@@ -84,8 +80,7 @@ public final actor STOMPConnection: Sendable {
         let future =
             if eventLoop.inEventLoop {
                 self._makeConnection(
-                    host: host,
-                    port: port,
+                    address: address,
                     configuration: configuration,
                     eventLoop: eventLoop,
                     logger: logger
@@ -93,8 +88,7 @@ public final actor STOMPConnection: Sendable {
             } else {
                 eventLoop.flatSubmit {
                     self._makeConnection(
-                        host: host,
-                        port: port,
+                        address: address,
                         configuration: configuration,
                         eventLoop: eventLoop,
                         logger: logger
@@ -120,8 +114,7 @@ public final actor STOMPConnection: Sendable {
     }
 
     private static func _makeConnection(
-        host: String,
-        port: Int,
+        address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration,
         eventLoop: any EventLoop,
         logger: Logger
@@ -154,9 +147,17 @@ public final actor STOMPConnection: Sendable {
         }
 
         let future: EventLoopFuture<any Channel>
-        future = connect.connect(host: host, port: port)
-        future.whenSuccess { _ in
-            logger.debug("Client connected to \(host):\(port)")
+        switch address.value {
+        case .hostname(let host, let port):
+            future = connect.connect(host: host, port: port)
+            future.whenSuccess { _ in
+                logger.debug("Client connected to \(host):\(port)")
+            }
+        case .unixDomainSocket(let path):
+            future = connect.connect(unixDomainSocketPath: path)
+            future.whenSuccess { _ in
+                logger.debug("Client connected to socket path \(path)")
+            }
         }
 
         return future.flatMapThrowing { channel in
@@ -231,7 +232,7 @@ public final actor STOMPConnection: Sendable {
     @inlinable
     public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
         guard frame.headers.contains(where: { $0.name == "receipt" }) else {
-            try await self.channel.writeAndFlush(frame)
+            try self.channelHandler.sendFrameNoWait(frame)
             return nil
         }
 
