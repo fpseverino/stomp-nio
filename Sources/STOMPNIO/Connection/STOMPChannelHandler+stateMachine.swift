@@ -72,14 +72,16 @@ extension STOMPChannelHandler {
 
         /// handler wants to send a frame
         @usableFromInline
-        mutating func sendFrame(_ task: STOMPTask) -> SendFrameAction {
+        mutating func sendFrame(_ task: STOMPTask?) -> SendFrameAction {
             switch consume self.state {
             case .uninitialized:
                 preconditionFailure("Cannot send frame when uninitialized")
             case .initialized:
                 preconditionFailure("Cannot send frame when in initialized state")
             case .connected(var state):
-                state.tasks.append(task)
+                if let task {
+                    state.tasks.append(task)
+                }
                 self = .connected(state)
                 return .sendFrame(state.context)
             case .closing(let state):

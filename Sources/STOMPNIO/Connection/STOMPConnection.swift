@@ -232,7 +232,7 @@ public final actor STOMPConnection: Sendable {
     @inlinable
     public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
         guard frame.headers.contains(where: { $0.name == "receipt" }) else {
-            try await self.channel.writeAndFlush(frame)
+            try self.channelHandler.sendFrameNoWait(frame)
             return nil
         }
 

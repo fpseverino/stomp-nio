@@ -258,6 +258,17 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     }
 
     @usableFromInline
+    func sendFrameNoWait(_ frame: STOMPFrame) throws {
+        self.eventLoop.assertInEventLoop()
+        switch self.stateMachine.sendFrame(nil) {
+        case .sendFrame(let context):
+            _ = context.channel.writeAndFlush(frame)
+        case .throwError(let error):
+            throw error
+        }
+    }
+
+    @usableFromInline
     func sendFrame(
         _ frame: STOMPFrame,
         promise: STOMPPromise<STOMPFrame>,
