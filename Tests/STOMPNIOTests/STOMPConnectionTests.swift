@@ -2,6 +2,7 @@ import Configuration
 import Foundation
 import Logging
 import NIOCore
+import NIOFoundationCompat
 import STOMPNIO
 import Testing
 
@@ -36,6 +37,45 @@ struct STOMPConnectionTests {
             try await group.waitForAll()
         }
     }
+
+    @Test("Publish Large Payload", .serialized, arguments: STOMPAckMode.allCases)
+    func publishLargePayload(ackMode: STOMPAckMode) async throws {
+        let payloadSize = 65537
+        let payloadData = Data(count: payloadSize)
+        let payload = ByteBufferAllocator().buffer(data: payloadData)
+
+        try await withThrowingTaskGroup { group in
+            group.addTask {
+                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
+                    try await connection.subscribe(to: "/queue/a", ackMode: ackMode) { subscription in
+                        for try await frame in subscription {
+                            var buffer = frame.body
+                            let data = buffer.readData(length: buffer.readableBytes)
+                            #expect(data == payloadData)
+                            return
+                        }
+                    }
+                }
+            }
+
+            group.addTask {
+                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.publisherLogger) { connection in
+                    try await connection.send(payload, to: "/queue/a")
+                }
+            }
+
+            try await group.waitForAll()
+        }
+    }
+
+    #if os(macOS)
+    @Test("Connect with Raw IP Address")
+    func rawIPConnect() async throws {
+        try await STOMPConnection.withConnection(address: .hostname("127.0.0.1"), logger: self.logger) { connection in
+            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+        }
+    }
+    #endif
 
     @Test("Connect with Wrong Host and Port")
     func wrongHostAndPort() async throws {
