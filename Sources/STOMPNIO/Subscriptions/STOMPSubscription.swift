@@ -4,19 +4,33 @@ import NIOCore
 public struct STOMPSubscription: AsyncSequence, Sendable {
     /// The type that the sequence produces.
     public typealias Element = STOMPFrame
-    public typealias AsyncIterator = AsyncThrowingStream<STOMPFrame, any Error>.AsyncIterator
 
-    typealias Continuation = AsyncThrowingStream<STOMPFrame, any Error>.Continuation
+    typealias BaseAsyncSequence = AsyncThrowingStream<STOMPFrame, any Error>
+    typealias Continuation = BaseAsyncSequence.Continuation
 
-    let base: AsyncThrowingStream<STOMPFrame, any Error>
+    let base: BaseAsyncSequence
 
     static func makeStream() -> (Self, Self.Continuation) {
-        let (stream, continuation) = AsyncThrowingStream<STOMPFrame, any Error>.makeStream()
+        let (stream, continuation) = BaseAsyncSequence.makeStream()
         return (.init(base: stream), continuation)
     }
 
     /// Creates a sequence of subscription messages.
     public func makeAsyncIterator() -> AsyncIterator {
-        self.base.makeAsyncIterator()
+        AsyncIterator(base: self.base.makeAsyncIterator())
+    }
+
+    /// An iterator that provides subscription messages.
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        var base: BaseAsyncSequence.AsyncIterator
+
+        @concurrent
+        public mutating func next() async throws -> Element? {
+            try await self.base.next()
+        }
+
+        public mutating func next(isolation actor: isolated (any Actor)?) async throws(any Error) -> STOMPFrame? {
+            try await self.base.next(isolation: actor)
+        }
     }
 }

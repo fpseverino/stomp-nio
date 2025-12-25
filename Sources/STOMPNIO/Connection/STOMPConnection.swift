@@ -52,7 +52,6 @@ public final actor STOMPConnection: Sendable {
     ///   - configuration: Configuration for the STOMP connection
     ///   - eventLoop: EventLoop to run connection on
     ///   - logger: Logger to use for the connection
-    ///   - isolation: Actor isolation
     ///   - operation: Closure where STOMP operations using the connection are performed
     ///
     /// - Returns: The value returned by the `operation` closure
@@ -61,7 +60,6 @@ public final actor STOMPConnection: Sendable {
         configuration: STOMPConnectionConfiguration = .init(),
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
         logger: Logger,
-        isolation: isolated (any Actor)? = #isolation,
         operation: (STOMPConnection) async throws -> sending Value
     ) async throws -> sending Value {
         let connection = try await self.connect(
