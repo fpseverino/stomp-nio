@@ -12,16 +12,19 @@ extension STOMPConnectionConfiguration {
     ///
     /// - Parameter config: The config reader to read configuration values from.
     public init(config: ConfigReader) {
-        let login = config.string(forKey: "stomp.auth.login")
-        let passcode = config.string(forKey: "stomp.auth.passcode", isSecret: true)
+        let stompConfig = config.scoped(to: "stomp")
+        self.virtualHost = stompConfig.string(forKey: "virtualHost")
+        self.connectTimeout = .seconds(stompConfig.int(forKey: "connectTimeout", default: 10))
+        self.receiptTimeout = .seconds(stompConfig.int(forKey: "receiptTimeout", default: 30))
+
+        let stompAuthConfig = stompConfig.scoped(to: "auth")
+        let login = stompAuthConfig.string(forKey: "login")
+        let passcode = stompAuthConfig.string(forKey: "passcode", isSecret: true)
         self.authentication =
             if let login, let passcode {
                 .init(login: login, passcode: passcode)
             } else {
                 nil
             }
-        self.virtualHost = config.string(forKey: "stomp.virtualHost")
-        self.connectTimeout = .seconds(config.int(forKey: "stomp.connectTimeout", default: 10))
-        self.receiptTimeout = .seconds(config.int(forKey: "stomp.receiptTimeout", default: 30))
     }
 }

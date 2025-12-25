@@ -15,7 +15,7 @@ struct STOMPConnectionTests {
 
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup { group in
             group.addTask {
                 try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
                     try await connection.subscribe(to: "/queue/a", ackMode: ackMode) { subscription in
