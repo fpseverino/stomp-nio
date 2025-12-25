@@ -10,11 +10,11 @@ import Testing
 import NIOTransportServices
 #endif
 
-@Suite("STOMPConnection Tests")
+@Suite("STOMPConnection Tests", .serialized)
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
-    @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
+    @Test("Pub/Sub", arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
         try await withThrowingTaskGroup { group in
             group.addTask {
@@ -38,7 +38,7 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Publish Large Payload", .serialized, arguments: STOMPAckMode.allCases)
+    @Test("Publish Large Payload", arguments: STOMPAckMode.allCases)
     func publishLargePayload(ackMode: STOMPAckMode) async throws {
         let payloadSize = 65537
         let payloadData = Data(count: payloadSize)
