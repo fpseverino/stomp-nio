@@ -67,13 +67,13 @@ struct STOMPSubscriptions {
             continuation: continuation,
             ackMode: ackMode
         )
-        subscriptionIDMap[id] = subscription
+        self.subscriptionIDMap[id] = subscription
         return subscription
     }
 
     /// Remove subscription
     mutating func removeSubscription(id: UInt) {
-        subscriptionIDMap[id] = nil
+        self.subscriptionIDMap[id] = nil
     }
 
     /// Check if the subscription requires acknowledgment
@@ -82,7 +82,7 @@ struct STOMPSubscriptions {
     ///
     /// - Returns: A Boolean value indicating whether the subscription requires acknowledgment
     func shouldAcknowledge(id: UInt) -> Bool {
-        guard let subscription = subscriptionIDMap[id] else { return false }
+        guard let subscription = self.subscriptionIDMap[id] else { return false }
         return subscription.ackMode != .auto
     }
 }

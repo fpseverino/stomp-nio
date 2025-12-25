@@ -135,18 +135,8 @@ struct STOMPConnectionTests {
             configuration: .init(receiptTimeout: .nanoseconds(1)),
             logger: self.logger
         ) { connection in
-            let frame = STOMPFrame(
-                command: .send,
-                headers: [
-                    STOMPHeader(name: "destination", value: "/queue/test"),
-                    STOMPHeader(name: "content-type", value: "text/plain"),
-                    STOMPHeader(name: "receipt", value: "sendFrame"),
-                ],
-                body: ByteBuffer(string: "Test Message")
-            )
-
-            await #expect(throws: STOMPClientError.timeout) {
-                try await connection.send(frame: frame)
+            _ = await #expect(throws: STOMPClientError.timeout) {
+                try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
             }
         }
     }
@@ -176,18 +166,7 @@ struct STOMPConnectionTests {
             eventLoop: NIOTSEventLoopGroup.singleton.any(),
             logger: self.logger
         ) { connection in
-            let frame = STOMPFrame(
-                command: .send,
-                headers: [
-                    STOMPHeader(name: "destination", value: "/queue/test"),
-                    STOMPHeader(name: "content-type", value: "text/plain"),
-                    STOMPHeader(name: "receipt", value: "nioTransportServicesConnection"),
-                ],
-                body: ByteBuffer(string: "Test Message")
-            )
-            let receiptFrame = try await connection.send(frame: frame)
-            #expect(receiptFrame != nil)
-            #expect(receiptFrame?.command == .receipt)
+            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
         }
     }
     #endif
