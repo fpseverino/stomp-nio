@@ -31,7 +31,6 @@ public struct STOMPTransaction: Sendable {
                 STOMPHeader(name: "destination", value: destination),
                 STOMPHeader(name: "content-length", value: "\(body.readableBytes)"),
                 STOMPHeader(name: "content-type", value: contentType),
-                // STOMPHeader(name: "receipt", value: UUID().uuidString),
                 STOMPHeader(name: "transaction", value: self.id),
             ]
         _ = try await self.connection.send(frame: STOMPFrame(command: .send, headers: headers, body: body))

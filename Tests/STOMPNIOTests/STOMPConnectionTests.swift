@@ -256,8 +256,8 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Transactions", arguments: STOMPAckMode.allCases)
-    func transactions(ackMode: STOMPAckMode) async throws {
+    @Test("Subscription Transaction", arguments: STOMPAckMode.allCases)
+    func subscriptionTransaction(ackMode: STOMPAckMode) async throws {
         try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
             try await connection.withTransaction { transaction in
                 try await withThrowingTaskGroup { group in
@@ -271,11 +271,36 @@ struct STOMPConnectionTests {
                     }
 
                     group.addTask {
-                        try await transaction.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/transaction")
+                        try await connection.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/transaction")
                     }
 
                     try await group.waitForAll()
                 }
+            }
+        }
+    }
+
+    @Test("Send Transaction")
+    func sendTransaction() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            try await withThrowingTaskGroup { group in
+                group.addTask {
+                    try await connection.withTransaction { transaction in
+                        try await transaction.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/transaction")
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                }
+
+                group.addTask {
+                    try await connection.subscribe(to: "/queue/transaction") { subscription in
+                        for try await frame in subscription {
+                            #expect(String(buffer: frame.body) == "Message in Transaction")
+                            return
+                        }
+                    }
+                }
+
+                try await group.waitForAll()
             }
         }
     }
