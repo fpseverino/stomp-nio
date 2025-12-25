@@ -122,7 +122,7 @@ struct STOMPConnectionTests {
         await #expect(throws: STOMPClientError.timeout) {
             try await STOMPConnection.withConnection(
                 address: .hostname(Self.hostname),
-                configuration: .init(connectTimeout: .milliseconds(1)),
+                configuration: .init(connectTimeout: .nanoseconds(1)),
                 logger: self.logger
             ) { _ in }
         }
