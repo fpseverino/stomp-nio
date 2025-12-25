@@ -184,14 +184,12 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         case .messageReceived:
             let ackHeader = frame.headers.first(where: { $0.name == "ack" }).map { STOMPHeader(name: "id", value: $0.value) }
             do {
-                try self.subscriptions.notify(frame)
-
                 guard let subscriptionHeader = frame.headers.first(where: { $0.name == "subscription" }),
                     let messageIDHeader = frame.headers.first(where: { $0.name == "message-id" })
                 else {
                     throw STOMPClientError.missingHeader(message: "Missing subscription or message-id header in MESSAGE frame")
                 }
-                if let subscriptionID = Int(subscriptionHeader.value), self.subscriptions.shouldAcknowledge(id: subscriptionID) {
+                if let subscriptionID = UInt(subscriptionHeader.value), self.subscriptions.shouldAcknowledge(id: subscriptionID) {
                     var headers = [
                         STOMPHeader(name: "subscription", value: subscriptionHeader.value),
                         STOMPHeader(name: "message-id", value: messageIDHeader.value),
@@ -203,6 +201,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                     )
                     _ = context.channel.writeAndFlush(ackFrame)
                 }
+                try self.subscriptions.notify(frame)
             } catch {
                 self.failTasksAndCloseSubscriptions(with: error)
                 context.fireErrorCaught(error)
@@ -302,66 +301,58 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         destination: String,
         ackMode: STOMPAckMode,
         userDefinedHeaders: [STOMPHeader],
-        promise: STOMPPromise<Int>
+        promise: STOMPPromise<UInt>
     ) {
         self.eventLoop.assertInEventLoop()
-        switch self.subscriptions.addSubscription(continuation: streamContinuation, destination: destination, ackMode: ackMode) {
-        case .subscribe(let subscription, _):
-            let subscriptionID = subscription.id
-            let receiptID = UUID().uuidString
-            let subscribeFrame = STOMPFrame(
-                command: .subscribe,
-                headers: [
-                    STOMPHeader(name: "destination", value: destination),
-                    STOMPHeader(name: "id", value: String(subscriptionID)),
-                    STOMPHeader(name: "ack", value: ackMode.rawValue),
-                    STOMPHeader(name: "receipt", value: receiptID),
-                ] + userDefinedHeaders
-            )
-            self.sendFrame(subscribeFrame) { newFrame in
-                newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
-            }.assumeIsolated().whenComplete { result in
-                switch result {
-                case .success:
-                    promise.succeed(subscriptionID)
-                case .failure(let error):
-                    self.subscriptions.removeSubscription(id: subscriptionID)
-                    promise.fail(error)
-                }
+        let subscription = self.subscriptions.addSubscription(continuation: streamContinuation, destination: destination, ackMode: ackMode)
+        let subscriptionID = subscription.id
+        let receiptID = UUID().uuidString
+        let subscribeFrame = STOMPFrame(
+            command: .subscribe,
+            headers: [
+                STOMPHeader(name: "destination", value: destination),
+                STOMPHeader(name: "id", value: String(subscriptionID)),
+                STOMPHeader(name: "ack", value: ackMode.rawValue),
+                STOMPHeader(name: "receipt", value: receiptID),
+            ] + userDefinedHeaders
+        )
+        self.sendFrame(subscribeFrame) { newFrame in
+            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
+        }.assumeIsolated().whenComplete { result in
+            switch result {
+            case .success:
+                promise.succeed(subscriptionID)
+            case .failure(let error):
+                self.subscriptions.removeSubscription(id: subscriptionID)
+                promise.fail(error)
             }
-        case .doNothing(let subscriptionID):
-            promise.succeed(subscriptionID)
         }
     }
 
     func unsubscribe(
-        id: Int,
+        id: UInt,
         userDefinedHeaders: [STOMPHeader],
         promise: STOMPPromise<Void>
     ) {
         self.eventLoop.assertInEventLoop()
-        switch self.subscriptions.unsubscribe(id: id) {
-        case .unsubscribe(_):
-            let receiptID = UUID().uuidString
-            let unsubscribeFrame = STOMPFrame(
-                command: .unsubscribe,
-                headers: [
-                    STOMPHeader(name: "id", value: String(id)),
-                    STOMPHeader(name: "receipt", value: receiptID),
-                ] + userDefinedHeaders
-            )
-            self.sendFrame(unsubscribeFrame) { newFrame in
-                newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
-            }.assumeIsolated().whenComplete { result in
-                switch result {
-                case .success:
-                    promise.succeed(())
-                case .failure(let error):
-                    promise.fail(error)
-                }
+        self.subscriptions.removeSubscription(id: id)
+        let receiptID = UUID().uuidString
+        let unsubscribeFrame = STOMPFrame(
+            command: .unsubscribe,
+            headers: [
+                STOMPHeader(name: "id", value: String(id)),
+                STOMPHeader(name: "receipt", value: receiptID),
+            ] + userDefinedHeaders
+        )
+        self.sendFrame(unsubscribeFrame) { newFrame in
+            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
+        }.assumeIsolated().whenComplete { result in
+            switch result {
+            case .success:
+                promise.succeed(())
+            case .failure(let error):
+                promise.fail(error)
             }
-        case .doNothing:
-            promise.succeed(())
         }
     }
 }
