@@ -18,6 +18,9 @@ import Foundation
 public final actor STOMPConnection: Sendable {
     nonisolated public let unownedExecutor: UnownedSerialExecutor
 
+    /// Request ID generator
+    @usableFromInline
+    static let requestIDGenerator: IDGenerator = .init()
     /// Logger used by connection
     @usableFromInline
     let logger: Logger
@@ -171,6 +174,45 @@ public final actor STOMPConnection: Sendable {
         }
     }
 
+    package static func setupChannelAndConnect(
+        _ channel: any Channel,
+        configuration: STOMPConnectionConfiguration = .init(),
+        logger: Logger
+    ) async throws -> STOMPConnection {
+        if !channel.eventLoop.inEventLoop {
+            return try await channel.eventLoop.flatSubmit {
+                self._setupChannelAndConnect(channel, configuration: configuration, logger: logger)
+            }.get()
+        }
+        return try await self._setupChannelAndConnect(channel, configuration: configuration, logger: logger).get()
+    }
+
+    private static func _setupChannelAndConnect(
+        _ channel: any Channel,
+        configuration: STOMPConnectionConfiguration,
+        logger: Logger
+    ) -> EventLoopFuture<STOMPConnection> {
+        do {
+            return channel.connect(to: try SocketAddress(ipAddress: "127.0.0.1", port: 1883)).flatMap {
+                channel.eventLoop.makeCompletedFuture {
+                    let handler = try self._setupChannel(
+                        channel,
+                        configuration: configuration,
+                        logger: logger
+                    )
+                    return STOMPConnection(
+                        channel: channel,
+                        channelHandler: handler,
+                        configuration: configuration,
+                        logger: logger
+                    )
+                }
+            }
+        } catch {
+            return channel.eventLoop.makeFailedFuture(error)
+        }
+    }
+
     @discardableResult
     static func _setupChannel(
         _ channel: any Channel,
@@ -216,8 +258,25 @@ public final actor STOMPConnection: Sendable {
         _ frame: STOMPFrame,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) async throws -> STOMPFrame {
-        try await withCheckedThrowingContinuation { continuation in
-            self.channelHandler.sendFrame(frame, promise: .swift(continuation), checkInbound: checkInbound)
+        let requestID = Self.requestIDGenerator.next()
+        return try await withTaskCancellationHandler {
+            if Task.isCancelled {
+                throw STOMPClientError.cancelledTask
+            }
+            return try await withCheckedThrowingContinuation { continuation in
+                self.channelHandler.sendFrame(frame, promise: .swift(continuation), requestID: requestID, checkInbound: checkInbound)
+            }
+        } onCancel: {
+            self.cancel(requestID: requestID)
+        }
+    }
+
+    @usableFromInline
+    nonisolated func cancel(requestID: Int) {
+        self.channel.eventLoop.execute {
+            self.assumeIsolated { this in
+                this.channelHandler.cancel(requestID: requestID)
+            }
         }
     }
 

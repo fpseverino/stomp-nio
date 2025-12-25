@@ -2,6 +2,7 @@ import Configuration
 import Foundation
 import Logging
 import NIOCore
+import NIOEmbedded
 import NIOFoundationCompat
 import STOMPNIO
 import Testing
@@ -121,7 +122,7 @@ struct STOMPConnectionTests {
         await #expect(throws: STOMPClientError.timeout) {
             try await STOMPConnection.withConnection(
                 address: .hostname(Self.hostname),
-                configuration: .init(connectTimeout: .milliseconds(1)),
+                configuration: .init(connectTimeout: .nanoseconds(1)),
                 logger: self.logger
             ) { _ in }
         }
@@ -211,6 +212,68 @@ struct STOMPConnectionTests {
             logger: self.logger
         ) { connection in
             try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+        }
+    }
+
+    @Test("Cancellation")
+    func cancellation() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            await withThrowingTaskGroup { group in
+                group.addTask {
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.subscribe(to: "/queue/test") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive messages")
+                            }
+                        }
+                    }
+                }
+                group.cancelAll()
+            }
+        }
+    }
+
+    @Test("Already Cancelled")
+    func alreadyCancelled() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            await withThrowingTaskGroup(of: Void.self) { group in
+                group.cancelAll()
+                group.addTask {
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.subscribe(to: "/queue/test") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive messages")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("Connection Close due to Cancellation")
+    func connectionCloseDueToCancellation() async throws {
+        let channel = NIOAsyncTestingChannel()
+        let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
+        try await channel.processConnect()
+
+        try await withThrowingTaskGroup { group in
+            group.addTask {
+                await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
+                    try await connection.send(ByteBuffer(), to: "foo")
+                }
+            }
+            try await withThrowingTaskGroup { group in
+                group.addTask {
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.send(ByteBuffer(), to: "foo")
+                    }
+                }
+                // wait for outbound write from both tasks
+                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                group.cancelAll()
+            }
         }
     }
 
