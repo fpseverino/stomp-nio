@@ -10,11 +10,11 @@ import Testing
 import NIOTransportServices
 #endif
 
-@Suite("STOMPConnection Tests")
+@Suite("STOMPConnection Tests", .serialized)
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
-    @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
+    @Test("Pub/Sub", arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
         try await withThrowingTaskGroup { group in
             group.addTask {
@@ -38,7 +38,7 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Publish Large Payload", .serialized, arguments: STOMPAckMode.allCases)
+    @Test("Publish Large Payload", arguments: STOMPAckMode.allCases)
     func publishLargePayload(ackMode: STOMPAckMode) async throws {
         let payloadSize = 65537
         let payloadData = Data(count: payloadSize)
@@ -211,6 +211,71 @@ struct STOMPConnectionTests {
             logger: self.logger
         ) { connection in
             try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+        }
+    }
+
+    @Test("Cancellation")
+    func cancellation() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            await withThrowingTaskGroup { group in
+                group.addTask {
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.subscribe(to: "/queue/test") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive messages")
+                            }
+                        }
+                    }
+                }
+                group.cancelAll()
+            }
+        }
+    }
+
+    @Test("Already Cancelled")
+    func alreadyCancelled() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            await withThrowingTaskGroup(of: Void.self) { group in
+                group.cancelAll()
+                group.addTask {
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.subscribe(to: "/queue/test") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive messages")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("Connection Close due to Cancellation")
+    func connectionCloseDueToCancellation() async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            await withThrowingTaskGroup { group in
+                group.addTask {
+                    await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
+                        try await connection.subscribe(to: "/queue/test") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive messages")
+                            }
+                        }
+                    }
+                }
+                await withThrowingTaskGroup { group in
+                    group.addTask {
+                        await #expect(throws: STOMPClientError.cancelledTask) {
+                            try await connection.subscribe(to: "/queue/test") { subscription in
+                                for try await _ in subscription {
+                                    Issue.record("Should not receive messages")
+                                }
+                            }
+                        }
+                    }
+                    group.cancelAll()
+                }
+            }
         }
     }
 

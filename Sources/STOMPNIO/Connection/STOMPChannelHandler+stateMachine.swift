@@ -37,6 +37,19 @@ extension STOMPChannelHandler {
         struct ConnectedState {
             let context: Context
             var tasks: [STOMPTask]
+
+            func cancel(requestID: Int) -> (cancel: [STOMPTask], connectionClosedDueToCancellation: [STOMPTask]) {
+                var withRequestID = [STOMPTask]()
+                var withoutRequestID = [STOMPTask]()
+                for task in tasks {
+                    if task.requestID == requestID {
+                        withRequestID.append(task)
+                    } else {
+                        withoutRequestID.append(task)
+                    }
+                }
+                return (withRequestID, withoutRequestID)
+            }
         }
 
         init() {
@@ -322,6 +335,52 @@ extension STOMPChannelHandler {
             case .closed(let error):
                 self = .closed(error)
                 return .clearCallback
+            }
+        }
+
+        @usableFromInline
+        enum CancelAction {
+            case failTasksAndClose(Context, cancel: [STOMPTask], closeConnectionDueToCancel: [STOMPTask])
+            case doNothing
+        }
+
+        /// handler wants to cancel a task
+        @usableFromInline
+        mutating func cancel(requestID: Int) -> CancelAction {
+            switch consume self.state {
+            case .uninitialized:
+                preconditionFailure("Cannot cancel when uninitialized")
+            case .initialized:
+                preconditionFailure("Cannot cancel while in initialized state")
+            case .connected(let state):
+                let (cancel, closeConnectionDueToCancel) = state.cancel(requestID: requestID)
+                if cancel.count > 0 {
+                    self = .closed(CancellationError())
+                    return .failTasksAndClose(
+                        state.context,
+                        cancel: cancel,
+                        closeConnectionDueToCancel: closeConnectionDueToCancel
+                    )
+                } else {
+                    self = .connected(state)
+                    return .doNothing
+                }
+            case .closing(let state):
+                let (cancel, closeConnectionDueToCancel) = state.cancel(requestID: requestID)
+                if cancel.count > 0 {
+                    self = .closed(CancellationError())
+                    return .failTasksAndClose(
+                        state.context,
+                        cancel: cancel,
+                        closeConnectionDueToCancel: closeConnectionDueToCancel
+                    )
+                } else {
+                    self = .closing(state)
+                    return .doNothing
+                }
+            case .closed(let error):
+                self = .closed(error)
+                return .doNothing
             }
         }
 

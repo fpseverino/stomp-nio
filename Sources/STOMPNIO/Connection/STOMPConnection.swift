@@ -18,6 +18,9 @@ import Foundation
 public final actor STOMPConnection: Sendable {
     nonisolated public let unownedExecutor: UnownedSerialExecutor
 
+    /// Request ID generator
+    @usableFromInline
+    static let requestIDGenerator: IDGenerator = .init()
     /// Logger used by connection
     @usableFromInline
     let logger: Logger
@@ -216,8 +219,25 @@ public final actor STOMPConnection: Sendable {
         _ frame: STOMPFrame,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) async throws -> STOMPFrame {
-        try await withCheckedThrowingContinuation { continuation in
-            self.channelHandler.sendFrame(frame, promise: .swift(continuation), checkInbound: checkInbound)
+        let requestID = Self.requestIDGenerator.next()
+        return try await withTaskCancellationHandler {
+            if Task.isCancelled {
+                throw STOMPClientError.cancelledTask
+            }
+            return try await withCheckedThrowingContinuation { continuation in
+                self.channelHandler.sendFrame(frame, promise: .swift(continuation), requestID: requestID, checkInbound: checkInbound)
+            }
+        } onCancel: {
+            self.cancel(requestID: requestID)
+        }
+    }
+
+    @usableFromInline
+    nonisolated func cancel(requestID: Int) {
+        self.channel.eventLoop.execute {
+            self.assumeIsolated { this in
+                this.channelHandler.cancel(requestID: requestID)
+            }
         }
     }
 

@@ -98,7 +98,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
         self.stateMachine.setInitialized(
             context: context,
-            connectTask: .init(promise: .nio(promise), deadline: deadline) { $0.command == .connected }
+            connectTask: .init(promise: .nio(promise), requestID: 0, deadline: deadline) { $0.command == .connected }
         )
     }
 
@@ -167,6 +167,25 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             context.close(promise: nil)
         } catch {
             preconditionFailure("Expected to only get ParseError from the STOMPFrameDecoder.")
+        }
+    }
+
+    @usableFromInline
+    func cancel(requestID: Int) {
+        self.eventLoop.assertInEventLoop()
+        switch self.stateMachine.cancel(requestID: requestID) {
+        case .failTasksAndClose(let context, let cancelled, let closeConnectionDueToCancel):
+            for command in cancelled {
+                command.promise.fail(STOMPClientError.cancelledTask)
+            }
+            for command in closeConnectionDueToCancel {
+                command.promise.fail(STOMPClientError.connectionClosedDueToCancellation)
+            }
+            self.failTasksAndCloseSubscriptions(with: STOMPClientError.cancelledTask)
+            context.fireErrorCaught(STOMPClientError.cancelledTask)
+            context.close(promise: nil)
+        case .doNothing:
+            break
         }
     }
 
@@ -271,11 +290,12 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func sendFrame(
         _ frame: STOMPFrame,
         promise: STOMPPromise<STOMPFrame>,
+        requestID: Int,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) {
         self.eventLoop.assertInEventLoop()
         let deadline = .now() + self.configuration.receiptTimeout
-        let task = STOMPTask(promise: promise, deadline: deadline, checkInbound: checkInbound)
+        let task = STOMPTask(promise: promise, requestID: requestID, deadline: deadline, checkInbound: checkInbound)
         switch self.stateMachine.sendFrame(task) {
         case .sendFrame(let context):
             _ = context.channel.writeAndFlush(frame)
@@ -289,10 +309,11 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
     private func sendFrame(
         _ frame: STOMPFrame,
+        requestID: Int,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) -> EventLoopFuture<STOMPFrame> {
         let promise = self.eventLoop.makePromise(of: STOMPFrame.self)
-        self.sendFrame(frame, promise: .nio(promise), checkInbound: checkInbound)
+        self.sendFrame(frame, promise: .nio(promise), requestID: requestID, checkInbound: checkInbound)
         return promise.futureResult
     }
 
@@ -301,7 +322,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         destination: String,
         ackMode: STOMPAckMode,
         userDefinedHeaders: [STOMPHeader],
-        promise: STOMPPromise<UInt>
+        promise: STOMPPromise<UInt>,
+        requestID: Int
     ) {
         self.eventLoop.assertInEventLoop()
         let subscription = self.subscriptions.addSubscription(continuation: streamContinuation, destination: destination, ackMode: ackMode)
@@ -316,7 +338,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 STOMPHeader(name: "receipt", value: receiptID),
             ] + userDefinedHeaders
         )
-        self.sendFrame(subscribeFrame) { newFrame in
+        self.sendFrame(subscribeFrame, requestID: requestID) { newFrame in
             newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
         }.assumeIsolated().whenComplete { result in
             switch result {
@@ -332,7 +354,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func unsubscribe(
         id: UInt,
         userDefinedHeaders: [STOMPHeader],
-        promise: STOMPPromise<Void>
+        promise: STOMPPromise<Void>,
+        requestID: Int
     ) {
         self.eventLoop.assertInEventLoop()
         self.subscriptions.removeSubscription(id: id)
@@ -344,7 +367,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 STOMPHeader(name: "receipt", value: receiptID),
             ] + userDefinedHeaders
         )
-        self.sendFrame(unsubscribeFrame) { newFrame in
+        self.sendFrame(unsubscribeFrame, requestID: requestID) { newFrame in
             newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
         }.assumeIsolated().whenComplete { result in
             switch result {

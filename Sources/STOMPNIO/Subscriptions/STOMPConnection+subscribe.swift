@@ -52,7 +52,8 @@ extension STOMPConnection {
                 destination: destination,
                 ackMode: ackMode,
                 userDefinedHeaders: userDefinedHeaders,
-                promise: .swift(continuation)
+                promise: .swift(continuation),
+                requestID: Self.requestIDGenerator.next()
             )
         }
         return (subscriptionID, stream)
@@ -61,7 +62,12 @@ extension STOMPConnection {
     @usableFromInline
     func unsubscribe(id: UInt, userDefinedHeaders: [STOMPHeader]) async throws {
         try await withCheckedThrowingContinuation { continuation in
-            self.channelHandler.unsubscribe(id: id, userDefinedHeaders: userDefinedHeaders, promise: .swift(continuation))
+            self.channelHandler.unsubscribe(
+                id: id,
+                userDefinedHeaders: userDefinedHeaders,
+                promise: .swift(continuation),
+                requestID: Self.requestIDGenerator.next()
+            )
         }
     }
 }
