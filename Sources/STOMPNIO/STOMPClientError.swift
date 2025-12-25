@@ -8,8 +8,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
             case errorFrame
             /// A unexpected frame was received from the server
             case unsolicitedFrame
-            /// The server disconnected
-            case serverDisconnection
             /// The Task was cancelled
             case cancelledTask
             /// An expected header is missing from a frame
@@ -30,8 +28,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
         public static let errorFrame = Self(.errorFrame)
         /// A unexpected frame was received from the server
         public static let unsolicitedFrame = Self(.unsolicitedFrame)
-        /// The server disconnected
-        public static let serverDisconnection = Self(.serverDisconnection)
         /// The Task was cancelled
         public static let cancelledTask = Self(.cancelledTask)
         /// An expected header is missing from a frame
@@ -98,9 +94,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
     public static func unsolicitedFrame(message: String) -> Self {
         .init(backing: .init(errorType: .unsolicitedFrame, message: message))
     }
-
-    /// The server disconnected
-    public static let serverDisconnection = Self(errorType: .serverDisconnection)
 
     /// The Task was cancelled
     public static let cancelledTask = Self(errorType: .cancelledTask)
