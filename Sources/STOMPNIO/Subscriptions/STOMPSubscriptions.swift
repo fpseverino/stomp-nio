@@ -59,13 +59,15 @@ struct STOMPSubscriptions {
     mutating func addSubscription(
         continuation: STOMPSubscription.Continuation,
         destination: String,
-        ackMode: STOMPAckMode
+        ackMode: STOMPAckMode,
+        transactionID: String?
     ) -> SubscriptionRef {
         let id = Self.getSubscriptionID()
         let subscription = SubscriptionRef(
             id: id,
             continuation: continuation,
-            ackMode: ackMode
+            ackMode: ackMode,
+            transactionID: transactionID
         )
         self.subscriptionIDMap[id] = subscription
         return subscription
@@ -85,17 +87,28 @@ struct STOMPSubscriptions {
         guard let subscription = self.subscriptionIDMap[id] else { return false }
         return subscription.ackMode != .auto
     }
+
+    /// If the subscription is part of a transaction, return its ID
+    ///
+    /// - Parameter id: The subscription ID
+    ///
+    /// - Returns: The transaction ID, or `nil` if the subscription is not part of a transaction
+    func transactionID(for id: UInt) -> String? {
+        self.subscriptionIDMap[id]?.transactionID
+    }
 }
 
 /// Individual subscription associated with one SUBSCRIBE frame
 final class SubscriptionRef: Identifiable {
     let id: UInt
     let ackMode: STOMPAckMode
+    let transactionID: String?
     let continuation: STOMPSubscription.Continuation
 
-    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPAckMode) {
+    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPAckMode, transactionID: String?) {
         self.id = id
         self.ackMode = ackMode
+        self.transactionID = transactionID
         self.continuation = continuation
     }
 

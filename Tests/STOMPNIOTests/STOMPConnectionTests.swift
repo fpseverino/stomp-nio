@@ -256,6 +256,30 @@ struct STOMPConnectionTests {
         }
     }
 
+    @Test("Transactions", arguments: STOMPAckMode.allCases)
+    func transactions(ackMode: STOMPAckMode) async throws {
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            try await connection.withTransaction { transaction in
+                try await withThrowingTaskGroup { group in
+                    group.addTask {
+                        try await transaction.subscribe(to: "/queue/transaction", ackMode: ackMode) { subscription in
+                            for try await frame in subscription {
+                                #expect(String(buffer: frame.body) == "Message in Transaction")
+                                return
+                            }
+                        }
+                    }
+
+                    group.addTask {
+                        try await transaction.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/transaction")
+                    }
+
+                    try await group.waitForAll()
+                }
+            }
+        }
+    }
+
     let logger: Logger = {
         var logger = Logger(label: "STOMPConnectionTests")
         logger.logLevel = .trace

@@ -201,7 +201,6 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         case .unhandledTask:
             break
         case .messageReceived:
-            let ackHeader = frame.headers.first(where: { $0.name == "ack" }).map { STOMPHeader(name: "id", value: $0.value) }
             do {
                 guard let subscriptionHeader = frame.headers.first(where: { $0.name == "subscription" }),
                     let messageIDHeader = frame.headers.first(where: { $0.name == "message-id" })
@@ -213,7 +212,12 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                         STOMPHeader(name: "subscription", value: subscriptionHeader.value),
                         STOMPHeader(name: "message-id", value: messageIDHeader.value),
                     ]
-                    if let ackHeader { headers.append(ackHeader) }
+                    if let ackHeader = frame.headers.first(where: { $0.name == "ack" }).map({ STOMPHeader(name: "id", value: $0.value) }) {
+                        headers.append(ackHeader)
+                    }
+                    if let transactionID = self.subscriptions.transactionID(for: subscriptionID) {
+                        headers.append(STOMPHeader(name: "transaction", value: transactionID))
+                    }
                     let ackFrame = STOMPFrame(
                         command: .ack,
                         headers: headers
@@ -322,11 +326,17 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         destination: String,
         ackMode: STOMPAckMode,
         userDefinedHeaders: [STOMPHeader],
+        transactionID: String?,
         promise: STOMPPromise<UInt>,
         requestID: Int
     ) {
         self.eventLoop.assertInEventLoop()
-        let subscription = self.subscriptions.addSubscription(continuation: streamContinuation, destination: destination, ackMode: ackMode)
+        let subscription = self.subscriptions.addSubscription(
+            continuation: streamContinuation,
+            destination: destination,
+            ackMode: ackMode,
+            transactionID: transactionID
+        )
         let subscriptionID = subscription.id
         let receiptID = UUID().uuidString
         let subscribeFrame = STOMPFrame(

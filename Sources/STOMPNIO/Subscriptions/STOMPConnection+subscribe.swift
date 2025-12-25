@@ -39,7 +39,8 @@ extension STOMPConnection {
     func subscribe(
         destination: String,
         ackMode: STOMPAckMode,
-        userDefinedHeaders: [STOMPHeader]
+        userDefinedHeaders: [STOMPHeader],
+        transactionID: String? = nil
     ) async throws -> (UInt, STOMPSubscription) {
         let (stream, streamContinuation) = STOMPSubscription.makeStream()
         if Task.isCancelled {
@@ -51,6 +52,7 @@ extension STOMPConnection {
                 destination: destination,
                 ackMode: ackMode,
                 userDefinedHeaders: userDefinedHeaders,
+                transactionID: transactionID,
                 promise: .swift(continuation),
                 requestID: Self.requestIDGenerator.next()
             )
