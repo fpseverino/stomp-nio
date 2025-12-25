@@ -174,6 +174,45 @@ public final actor STOMPConnection: Sendable {
         }
     }
 
+    package static func setupChannelAndConnect(
+        _ channel: any Channel,
+        configuration: STOMPConnectionConfiguration = .init(),
+        logger: Logger
+    ) async throws -> STOMPConnection {
+        if !channel.eventLoop.inEventLoop {
+            return try await channel.eventLoop.flatSubmit {
+                self._setupChannelAndConnect(channel, configuration: configuration, logger: logger)
+            }.get()
+        }
+        return try await self._setupChannelAndConnect(channel, configuration: configuration, logger: logger).get()
+    }
+
+    private static func _setupChannelAndConnect(
+        _ channel: any Channel,
+        configuration: STOMPConnectionConfiguration,
+        logger: Logger
+    ) -> EventLoopFuture<STOMPConnection> {
+        do {
+            return channel.connect(to: try SocketAddress(ipAddress: "127.0.0.1", port: 1883)).flatMap {
+                channel.eventLoop.makeCompletedFuture {
+                    let handler = try self._setupChannel(
+                        channel,
+                        configuration: configuration,
+                        logger: logger
+                    )
+                    return STOMPConnection(
+                        channel: channel,
+                        channelHandler: handler,
+                        configuration: configuration,
+                        logger: logger
+                    )
+                }
+            }
+        } catch {
+            return channel.eventLoop.makeFailedFuture(error)
+        }
+    }
+
     @discardableResult
     static func _setupChannel(
         _ channel: any Channel,

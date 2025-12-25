@@ -2,6 +2,7 @@ import Configuration
 import Foundation
 import Logging
 import NIOCore
+import NIOEmbedded
 import NIOFoundationCompat
 import STOMPNIO
 import Testing
@@ -252,29 +253,26 @@ struct STOMPConnectionTests {
 
     @Test("Connection Close due to Cancellation")
     func connectionCloseDueToCancellation() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            await withThrowingTaskGroup { group in
+        let channel = NIOAsyncTestingChannel()
+        let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
+        try await channel.processConnect()
+
+        try await withThrowingTaskGroup { group in
+            group.addTask {
+                await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
+                    try await connection.send(ByteBuffer(), to: "foo")
+                }
+            }
+            try await withThrowingTaskGroup { group in
                 group.addTask {
-                    await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
-                        try await connection.subscribe(to: "/queue/test") { subscription in
-                            for try await _ in subscription {
-                                Issue.record("Should not receive messages")
-                            }
-                        }
+                    await #expect(throws: STOMPClientError.cancelledTask) {
+                        try await connection.send(ByteBuffer(), to: "foo")
                     }
                 }
-                await withThrowingTaskGroup { group in
-                    group.addTask {
-                        await #expect(throws: STOMPClientError.cancelledTask) {
-                            try await connection.subscribe(to: "/queue/test") { subscription in
-                                for try await _ in subscription {
-                                    Issue.record("Should not receive messages")
-                                }
-                            }
-                        }
-                    }
-                    group.cancelAll()
-                }
+                // wait for outbound write from both tasks
+                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                group.cancelAll()
             }
         }
     }
