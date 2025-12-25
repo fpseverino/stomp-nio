@@ -1,3 +1,4 @@
+import Configuration
 import Foundation
 import Logging
 import NIOCore
@@ -14,7 +15,7 @@ struct STOMPConnectionTests {
 
     @Test("Pub/Sub", .serialized, arguments: STOMPAckMode.allCases)
     func pubSub(ackMode: STOMPAckMode) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup { group in
             group.addTask {
                 try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
                     try await connection.subscribe(to: "/queue/a", ackMode: ackMode) { subscription in
@@ -149,6 +150,29 @@ struct STOMPConnectionTests {
         }
     }
     #endif
+
+    @Test("Configuration from ConfigReader")
+    func configReader() async throws {
+        let config = ConfigReader(
+            provider: InMemoryProvider(
+                values: [
+                    "stomp.auth.login": "guest",
+                    "stomp.auth.passcode": "guest",
+                    "stomp.virtualHost": "/",
+                    "stomp.connectTimeout": 15,
+                    "stomp.receiptTimeout": 45,
+                ]
+            )
+        )
+
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname),
+            configuration: .init(config: config),
+            logger: self.logger
+        ) { connection in
+            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/test")
+        }
+    }
 
     let logger: Logger = {
         var logger = Logger(label: "STOMPConnectionTests")
