@@ -285,7 +285,7 @@ struct STOMPConnectionTests {
                     try await connection.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
                         for try await _ in subscription {
                             Issue.record("Should not receive the message, as the transaction has been aborted")
-                        }    
+                        }
                     }
                 }
 
@@ -331,7 +331,7 @@ struct STOMPConnectionTests {
                                 // The message is received and the ACK is sent, but as part of the transaction
                                 #expect(String(buffer: frame.body) == "Message in Transaction")
                                 return
-                            }    
+                            }
                         }
                     }
 
@@ -353,7 +353,7 @@ struct STOMPConnectionTests {
                     // The queue still has the message, since the ACK was rolled back
                     #expect(String(buffer: frame.body) == "Message in Transaction")
                     return
-                }    
+                }
             }
         }
     }
