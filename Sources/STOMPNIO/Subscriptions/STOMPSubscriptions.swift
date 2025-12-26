@@ -59,21 +59,23 @@ struct STOMPSubscriptions {
     mutating func addSubscription(
         continuation: STOMPSubscription.Continuation,
         destination: String,
-        ackMode: STOMPAckMode
+        ackMode: STOMPAckMode,
+        transactionID: String?
     ) -> SubscriptionRef {
         let id = Self.getSubscriptionID()
         let subscription = SubscriptionRef(
             id: id,
             continuation: continuation,
-            ackMode: ackMode
+            ackMode: ackMode,
+            transactionID: transactionID
         )
-        subscriptionIDMap[id] = subscription
+        self.subscriptionIDMap[id] = subscription
         return subscription
     }
 
     /// Remove subscription
     mutating func removeSubscription(id: UInt) {
-        subscriptionIDMap[id] = nil
+        self.subscriptionIDMap[id] = nil
     }
 
     /// Check if the subscription requires acknowledgment
@@ -82,8 +84,17 @@ struct STOMPSubscriptions {
     ///
     /// - Returns: A Boolean value indicating whether the subscription requires acknowledgment
     func shouldAcknowledge(id: UInt) -> Bool {
-        guard let subscription = subscriptionIDMap[id] else { return false }
+        guard let subscription = self.subscriptionIDMap[id] else { return false }
         return subscription.ackMode != .auto
+    }
+
+    /// If the subscription is part of a transaction, return its ID
+    ///
+    /// - Parameter id: The subscription ID
+    ///
+    /// - Returns: The transaction ID, or `nil` if the subscription is not part of a transaction
+    func transactionID(for id: UInt) -> String? {
+        self.subscriptionIDMap[id]?.transactionID
     }
 }
 
@@ -91,11 +102,13 @@ struct STOMPSubscriptions {
 final class SubscriptionRef: Identifiable {
     let id: UInt
     let ackMode: STOMPAckMode
+    let transactionID: String?
     let continuation: STOMPSubscription.Continuation
 
-    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPAckMode) {
+    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPAckMode, transactionID: String?) {
         self.id = id
         self.ackMode = ackMode
+        self.transactionID = transactionID
         self.continuation = continuation
     }
 
