@@ -1,11 +1,16 @@
 import Configuration
-import Foundation
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOFoundationCompat
 import STOMPNIO
 import Testing
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 #if canImport(Network)
 import NIOTransportServices
@@ -179,6 +184,8 @@ struct STOMPConnectionTests {
                     "stomp.auth.login": "guest",
                     "stomp.auth.passcode": "guest",
                     "stomp.virtualHost": "/",
+                    "stomp.heartBeat.outgoing": 1000,
+                    "stomp.heartBeat.incoming": 1000,
                     "stomp.connectTimeout": 15,
                     "stomp.receiptTimeout": 45,
                 ]
@@ -190,6 +197,7 @@ struct STOMPConnectionTests {
             configuration: .init(config: config),
             logger: self.logger
         ) { connection in
+            try await Task.sleep(for: .seconds(5))
             try await connection.send(ByteBuffer(string: "Test"), to: "/queue/config-reader")
         }
     }
@@ -381,6 +389,26 @@ struct STOMPConnectionTests {
                 try await Task.sleep(for: .seconds(1))
                 group.cancelAll()
             }
+        }
+    }
+
+    @Test(
+        "Heart-beating",
+        arguments: [
+            (outgoing: Duration.milliseconds(0), incoming: Duration.milliseconds(0)),
+            (outgoing: Duration.seconds(1), incoming: Duration.milliseconds(0)),
+            (outgoing: Duration.milliseconds(0), incoming: Duration.seconds(1)),
+            (outgoing: Duration.seconds(1), incoming: Duration.seconds(1)),
+        ]
+    )
+    func heartBeating(heartBeat: (outgoing: Duration, incoming: Duration)) async throws {
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname),
+            configuration: .init(heartBeat: heartBeat),
+            logger: self.logger
+        ) { connection in
+            try await Task.sleep(for: .seconds(5))
+            try await connection.send(ByteBuffer(string: "Test after heart-beating"), to: "/queue/heart-beating")
         }
     }
 

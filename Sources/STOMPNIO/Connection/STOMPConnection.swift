@@ -112,6 +112,9 @@ public final actor STOMPConnection: Sendable {
 
     func waitOnConnected() async throws {
         try await self.channelHandler.waitOnConnected().get()
+        if self.channelHandler.heartBeatCallback == nil && self.channelHandler.heartBeatFrequency > .milliseconds(0) {
+            self.channelHandler.scheduleHeartBeatCallback()
+        }
     }
 
     private static func _makeConnection(

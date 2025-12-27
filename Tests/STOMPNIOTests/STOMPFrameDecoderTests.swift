@@ -55,4 +55,37 @@ struct STOMPFrameDecoderTests {
         #expect(frame.command == .message)
         #expect(frame.body.getString(at: frame.body.readerIndex, length: frame.body.readableBytes) == "he")
     }
+
+    @Test("Ignore leading EOL heartbeats before frame")
+    func ignoreLeadingEOLHeartbeats() throws {
+        let decoder = STOMPFrameDecoder()
+
+        var buffer = ByteBufferAllocator().buffer(capacity: 64)
+        buffer.writeString("\n\n")  // heartbeats
+        buffer.writeString("CONNECT\n")
+        buffer.writeString("accept-version:1.2\n")
+        buffer.writeString("\n")
+        buffer.writeInteger(UInt8(0))
+
+        let frame = try #require(try decoder.decode(buffer: &buffer))
+        #expect(frame.command == .connect)
+        #expect(frame.headers.contains(where: { $0.name == "accept-version" && $0.value == "1.2" }))
+    }
+
+    @Test("Consume trailing EOLs after NULL terminator")
+    func consumeTrailingEOLsAfterNull() throws {
+        let decoder = STOMPFrameDecoder()
+
+        var buffer = ByteBufferAllocator().buffer(capacity: 64)
+        buffer.writeString("SEND\n\n")
+        buffer.writeString("payload")
+        buffer.writeInteger(UInt8(0))
+        buffer.writeString("\n\n\r\n")  // trailing EOLs to be skipped
+
+        let frame = try #require(try decoder.decode(buffer: &buffer))
+        #expect(frame.command == .send)
+        #expect(frame.body.getString(at: frame.body.readerIndex, length: frame.body.readableBytes) == "payload")
+        // After decode, trailing EOLs should have been consumed; decoder leaves readerIndex at next frame
+        #expect(buffer.readableBytes == 0)
+    }
 }
