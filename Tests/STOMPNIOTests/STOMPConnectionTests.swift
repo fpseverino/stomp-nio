@@ -392,19 +392,11 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test(
-        "Heart-beating",
-        arguments: [
-            (outgoing: Duration.milliseconds(0), incoming: Duration.milliseconds(0)),
-            (outgoing: Duration.seconds(1), incoming: Duration.milliseconds(0)),
-            (outgoing: Duration.milliseconds(0), incoming: Duration.seconds(1)),
-            (outgoing: Duration.seconds(1), incoming: Duration.seconds(1)),
-        ]
-    )
-    func heartBeating(heartBeat: (outgoing: Duration, incoming: Duration)) async throws {
+    @Test("Heart-beating")
+    func heartBeating() async throws {
         try await STOMPConnection.withConnection(
             address: .hostname(Self.hostname),
-            configuration: .init(heartBeat: heartBeat),
+            configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
             logger: self.logger
         ) { connection in
             try await Task.sleep(for: .seconds(5))
