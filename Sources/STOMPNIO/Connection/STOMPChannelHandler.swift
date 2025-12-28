@@ -222,6 +222,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                     if serverIncomingFrequency > 0 {
                         self.heartBeatFrequency = max(self.configuration.heartBeat.outgoing, .milliseconds(serverIncomingFrequency))
                         self.lastHeartBeatTime = .now()
+                        if self.heartBeatCallback == nil {
+                            self.scheduleHeartBeatCallback()
+                        }
                     }
                 }
             }
