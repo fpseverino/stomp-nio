@@ -67,9 +67,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     let configuration: Configuration
 
-    var heartBeatFrequency: TimeAmount
+    private var heartBeatFrequency: TimeAmount
     private var lastHeartBeatTime: NIODeadline
-    var heartBeatCallback: NIOScheduledCallback?
+    private var heartBeatCallback: NIOScheduledCallback?
 
     init(configuration: Configuration, eventLoop: any EventLoop, logger: Logger) {
         self.configuration = configuration
