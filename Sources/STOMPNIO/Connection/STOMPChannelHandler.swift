@@ -13,6 +13,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     struct Configuration {
         let authentication: STOMPConnectionConfiguration.Authentication?
         let virtualHost: String?
+        let heartBeat: (outgoing: TimeAmount, incoming: TimeAmount)
         @usableFromInline
         let connectTimeout: TimeAmount
         @usableFromInline
@@ -66,6 +67,10 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     let configuration: Configuration
 
+    private var heartBeatFrequency: TimeAmount
+    private var lastHeartBeatTime: NIODeadline
+    private var heartBeatCallback: NIOScheduledCallback?
+
     init(configuration: Configuration, eventLoop: any EventLoop, logger: Logger) {
         self.configuration = configuration
         self.eventLoop = eventLoop
@@ -73,17 +78,26 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         self.decoder = NIOSingleStepByteToMessageProcessor(STOMPFrameDecoder())
         self.stateMachine = .init()
         self.logger = logger
+
+        self.heartBeatFrequency = .milliseconds(0)
+        self.lastHeartBeatTime = .now()
+        self.heartBeatCallback = nil
     }
 
     @usableFromInline
     func setInitialized(context: ChannelHandlerContext) {
-        var headers: [STOMPHeader] = [STOMPHeader(name: "accept-version", value: "1.0,1.1,1.2")]
+        let outgoingHeartBeat = self.configuration.heartBeat.outgoing.nanoseconds / 1_000_000
+        let incomingHeartBeat = self.configuration.heartBeat.incoming.nanoseconds / 1_000_000
+        var headers: [STOMPHeader] = [
+            .init(name: "accept-version", value: "1.0,1.1,1.2"),
+            .init(name: "heart-beat", value: "\(outgoingHeartBeat),\(incomingHeartBeat)"),
+        ]
         if let authentication = self.configuration.authentication {
-            headers.append(STOMPHeader(name: "login", value: authentication.login))
-            headers.append(STOMPHeader(name: "passcode", value: authentication.passcode))
+            headers.append(.init(name: "login", value: authentication.login))
+            headers.append(.init(name: "passcode", value: authentication.passcode))
         }
         if let virtualHost = self.configuration.virtualHost {
-            headers.append(STOMPHeader(name: "host", value: virtualHost))
+            headers.append(.init(name: "host", value: virtualHost))
         }
         let connectFrame = STOMPFrame(command: .connect, headers: headers)
 
@@ -131,6 +145,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
     @usableFromInline
     func channelInactive(context: ChannelHandlerContext) {
+        self.heartBeatCallback?.cancel()
+        self.heartBeatCallback = nil
         // channel is inactive so we should fail all tasks in progress
         self.failTasksAndCloseSubscriptions(with: STOMPClientError.connectionClosed)
         self.logger.trace("Channel inactive.")
@@ -150,6 +166,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         var buffer = context.channel.allocator.buffer(capacity: 128)
         frame.encode(into: &buffer)
         context.write(self.wrapOutboundOut(buffer), promise: promise)
+        self.lastHeartBeatTime = .now()
     }
 
     @usableFromInline
@@ -194,6 +211,23 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
         switch self.stateMachine.receivedFrame(frame) {
         case .succeedTask(let task, let deadlineAction):
+            // Handle heart-beat negotiation on CONNECTED frame
+            if frame.command == .connected,
+                self.configuration.heartBeat.outgoing > .milliseconds(0),
+                let heartBeatHeader = frame.headers.first(where: { $0.name == "heart-beat" })
+            {
+                let components = heartBeatHeader.value.split(separator: ",").compactMap { Int64($0) }
+                if components.count == 2 {
+                    let serverIncomingFrequency = components[1]
+                    if serverIncomingFrequency > 0 {
+                        self.heartBeatFrequency = max(self.configuration.heartBeat.outgoing, .milliseconds(serverIncomingFrequency))
+                        self.lastHeartBeatTime = .now()
+                        if self.heartBeatCallback == nil {
+                            self.scheduleHeartBeatCallback()
+                        }
+                    }
+                }
+            }
             self.processDeadlineCallbackAction(action: deadlineAction)
             task.promise.succeed(frame)
         case .failTask(let task, let error):
@@ -388,6 +422,48 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             }
         }
     }
+
+    struct HeartBeatSchedule: NIOScheduledCallbackHandler {
+        let channelHandler: NIOLoopBound<STOMPChannelHandler>
+
+        func handleScheduledCallback(eventLoop: some EventLoop) {
+            let channelHandler = self.channelHandler.value
+            switch channelHandler.stateMachine.scheduleHeartBeat() {
+            case .doNothing:
+                break
+            case .schedule(let context):
+                // If `lastHeartBeatTime` plus the frequency is less than now send EOL,
+                // otherwise reschedule task
+                if channelHandler.lastHeartBeatTime + channelHandler.heartBeatFrequency <= .now() {
+                    guard context.channel.isActive else { return }
+                    let loopBoundContext = NIOLoopBound(context, eventLoop: eventLoop)
+                    var buffer = context.channel.allocator.buffer(capacity: 1)
+                    buffer.writeString("\n")
+                    context.writeAndFlush(channelHandler.wrapOutboundOut(buffer))
+                        .whenComplete { result in
+                            switch result {
+                            case .failure(let error):
+                                self.channelHandler.value.failTasksAndCloseSubscriptions(with: error)
+                                loopBoundContext.value.fireErrorCaught(error)
+                            case .success:
+                                break
+                            }
+                            self.channelHandler.value.lastHeartBeatTime = .now()
+                            self.channelHandler.value.scheduleHeartBeatCallback()
+                        }
+                } else {
+                    channelHandler.scheduleHeartBeatCallback()
+                }
+            }
+        }
+    }
+
+    func scheduleHeartBeatCallback() {
+        self.heartBeatCallback = try? self.eventLoop.scheduleCallback(
+            at: self.lastHeartBeatTime + self.heartBeatFrequency,
+            handler: HeartBeatSchedule(channelHandler: .init(self, eventLoop: self.eventLoop))
+        )
+    }
 }
 
 extension STOMPChannelHandler.Configuration {
@@ -395,6 +471,10 @@ extension STOMPChannelHandler.Configuration {
         self.init(
             authentication: other.authentication,
             virtualHost: other.virtualHost,
+            heartBeat: (
+                outgoing: .init(other.heartBeat.outgoing),
+                incoming: .init(other.heartBeat.incoming)
+            ),
             connectTimeout: .init(other.connectTimeout),
             receiptTimeout: .init(other.receiptTimeout)
         )

@@ -36,6 +36,17 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// > Note: If not set, no "host" header will be sent in the CONNECT frame.
     public var virtualHost: String?
 
+    /// The heart-beating configuration for the STOMP connection.
+    ///
+    /// The first `Duration` represents what the sender of the frame can do (outgoing heart-beats):
+    /// - 0 means it cannot send heart-beats
+    /// - otherwise it is the smallest amount of time between heart-beats that it can guarantee
+    ///
+    /// The second `Duration` represents what the sender of the frame would like to get (incoming heart-beats):
+    /// - 0 means it does not want to receive heart-beats
+    /// - otherwise it is the desired amount of time between heart-beats
+    public var heartBeat: (outgoing: Duration, incoming: Duration)
+
     /// The maximum time to wait for the CONNECTED frame after sending the CONNECT frame.
     ///
     /// If the timeout is reached without receiving a CONNECTED frame,
@@ -59,16 +70,19 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// - Parameters:
     ///   - authentication: Optional credentials for accessing the STOMP server. Set to `nil` for unauthenticated access.
     ///   - virtualHost: The name of a virtual host that the client wishes to connect to.
+    ///   - heartBeat: The heart-beating configuration for the STOMP connection. Defaults to no heart-beating.
     ///   - connectTimeout: Maximum time to wait for the CONNECTED frame. Defaults to 10 seconds.
     ///   - receiptTimeout: Maximum time to wait for a RECEIPT frame. Defaults to 30 seconds.
     public init(
         authentication: Authentication? = nil,
         virtualHost: String? = nil,
+        heartBeat: (outgoing: Duration, incoming: Duration) = (outgoing: .milliseconds(0), incoming: .milliseconds(0)),
         connectTimeout: Duration = .seconds(10),
         receiptTimeout: Duration = .seconds(30)
     ) {
         self.authentication = authentication
         self.virtualHost = virtualHost
+        self.heartBeat = heartBeat
         self.connectTimeout = connectTimeout
         self.receiptTimeout = receiptTimeout
     }

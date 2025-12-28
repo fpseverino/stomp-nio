@@ -1,11 +1,16 @@
 import Configuration
-import Foundation
 import Logging
 import NIOCore
 import NIOEmbedded
 import NIOFoundationCompat
 import STOMPNIO
 import Testing
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 #if canImport(Network)
 import NIOTransportServices
@@ -179,6 +184,8 @@ struct STOMPConnectionTests {
                     "stomp.auth.login": "guest",
                     "stomp.auth.passcode": "guest",
                     "stomp.virtualHost": "/",
+                    "stomp.heartBeat.outgoing": 1000,
+                    "stomp.heartBeat.incoming": 1000,
                     "stomp.connectTimeout": 15,
                     "stomp.receiptTimeout": 45,
                 ]
@@ -190,6 +197,7 @@ struct STOMPConnectionTests {
             configuration: .init(config: config),
             logger: self.logger
         ) { connection in
+            try await Task.sleep(for: .seconds(5))
             try await connection.send(ByteBuffer(string: "Test"), to: "/queue/config-reader")
         }
     }
@@ -381,6 +389,34 @@ struct STOMPConnectionTests {
                 try await Task.sleep(for: .seconds(1))
                 group.cancelAll()
             }
+        }
+    }
+
+    @Test("Heart-beating")
+    func heartBeating() async throws {
+        let channel = NIOAsyncTestingChannel()
+        let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
+        let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
+        try await channel.processConnect(configuration: configuration)
+
+        await channel.testingEventLoop.advanceTime(to: .now())
+        for _ in 1...5 {
+            await channel.testingEventLoop.advanceTime(by: .milliseconds(1100))
+
+            let outbound = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+            #expect(outbound == ByteBuffer(string: "\n"))
+        }
+    }
+
+    @Test("Heart-beating with Real Broker")
+    func heartBeatingBroker() async throws {
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname),
+            configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
+            logger: self.logger
+        ) { connection in
+            try await Task.sleep(for: .seconds(5))
+            try await connection.send(ByteBuffer(string: "Test after heart-beating"), to: "/queue/heart-beating-broker")
         }
     }
 

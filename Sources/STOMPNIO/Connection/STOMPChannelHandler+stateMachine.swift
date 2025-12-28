@@ -444,6 +444,31 @@ extension STOMPChannelHandler {
             }
         }
 
+        @usableFromInline
+        enum ScheduleHeartBeatAction {
+            case schedule(Context)
+            case doNothing
+        }
+
+        @usableFromInline
+        mutating func scheduleHeartBeat() -> ScheduleHeartBeatAction {
+            switch consume self.state {
+            case .uninitialized:
+                preconditionFailure("Cannot schedule heart-beat when uninitialized")
+            case .initialized:
+                preconditionFailure("Cannot schedule heart-beat when in initialized state")
+            case .connected(let state):
+                self = .connected(state)
+                return .schedule(state.context)
+            case .closing(let state):
+                self = .closing(state)
+                return .schedule(state.context)
+            case .closed(let error):
+                self = .closed(error)
+                return .doNothing
+            }
+        }
+
         private static var uninitialized: Self {
             StateMachine(.uninitialized)
         }
