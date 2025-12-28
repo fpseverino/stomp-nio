@@ -394,13 +394,29 @@ struct STOMPConnectionTests {
 
     @Test("Heart-beating")
     func heartBeating() async throws {
+        let channel = NIOAsyncTestingChannel()
+        let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
+        let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
+        try await channel.processConnect(configuration: configuration)
+
+        await channel.testingEventLoop.advanceTime(to: .now())
+        for _ in 1...5 {
+            await channel.testingEventLoop.advanceTime(by: .milliseconds(1100))
+
+            let outbound = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+            #expect(outbound == ByteBuffer(string: "\n"))
+        }
+    }
+
+    @Test("Heart-beating with Real Broker")
+    func heartBeatingBroker() async throws {
         try await STOMPConnection.withConnection(
             address: .hostname(Self.hostname),
             configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
             logger: self.logger
         ) { connection in
             try await Task.sleep(for: .seconds(5))
-            try await connection.send(ByteBuffer(string: "Test after heart-beating"), to: "/queue/heart-beating")
+            try await connection.send(ByteBuffer(string: "Test after heart-beating"), to: "/queue/heart-beating-broker")
         }
     }
 
