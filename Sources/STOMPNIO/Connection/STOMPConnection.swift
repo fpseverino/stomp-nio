@@ -72,6 +72,94 @@ public final actor STOMPConnection: Sendable {
         return try await operation(connection)
     }
 
+    /// Close connection
+    public nonisolated func close() {
+        guard self.isClosed.compareExchange(expected: false, desired: true, successOrdering: .relaxed, failureOrdering: .relaxed).exchanged
+        else {
+            return
+        }
+        self.channel.close(mode: .all, promise: nil)
+    }
+
+    /// Send a STOMP frame to the server.
+    ///
+    /// If the frame contains a `receipt` header, this method waits for the corresponding `RECEIPT` frame from the server and returns it.
+    /// If the frame does not contain a `receipt` header, the method returns `nil` immediately after sending the frame.
+    ///
+    /// - Parameter frame: The STOMP frame to send
+    ///
+    /// - Returns: The `RECEIPT` frame from the server if the sent frame contained a `receipt` header, otherwise `nil`
+    @inlinable
+    public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
+        guard frame.headers.contains(where: { $0.name == "receipt" }) else {
+            try self.channelHandler.sendFrameNoWait(frame)
+            return nil
+        }
+
+        return try await self.sendFrame(frame) { newFrame in
+            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == frame.headers.first(where: { $0.name == "receipt" })?.value
+        }
+    }
+
+    /// Send a message to a destination.
+    ///
+    /// - Parameters:
+    ///   - body: The body of the message.
+    ///   - destination: The destination to send the message to.
+    ///   - contentType: The content type of the message.
+    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame.
+    public func send(
+        _ body: ByteBuffer,
+        to destination: String,
+        contentType: String,
+        userDefinedHeaders: [STOMPHeader] = []
+    ) async throws {
+        let headers =
+            userDefinedHeaders + [
+                STOMPHeader(name: "destination", value: destination),
+                STOMPHeader(name: "content-length", value: "\(body.readableBytes)"),
+                STOMPHeader(name: "content-type", value: contentType),
+                STOMPHeader(name: "receipt", value: UUID().uuidString),
+            ]
+        _ = try await self.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
+    }
+
+    /// Send a text message to a destination.
+    ///
+    /// - Parameters:
+    ///   - body: The body of the message.
+    ///   - destination: The destination to send the message to.
+    ///   - contentType: The content type of the message. Defaults to `text/plain`.
+    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame.
+    public func send(
+        _ body: String,
+        to destination: String,
+        contentType: String = "text/plain",
+        userDefinedHeaders: [STOMPHeader] = []
+    ) async throws {
+        try await self.send(
+            ByteBuffer(string: body),
+            to: destination,
+            contentType: contentType,
+            userDefinedHeaders: userDefinedHeaders
+        )
+    }
+
+    /// Trigger a graceful shutdown of the STOMP connection.
+    ///
+    /// This method sends a `DISCONNECT` frame to the STOMP server and waits for the `RECEIPT` frame,
+    /// assuring that all previous frames have been received by the server.
+    ///
+    /// > Note: if the server closes its end of the socket too quickly,
+    /// the client might never receive the expected `RECEIPT` frame.
+    /// See the [Connection Lingering](https://stomp.github.io/stomp-specification-1.2.html#Connection_Lingering) section for more information.
+    ///
+    /// > Warning: Clients MUST NOT send any more frames after this method is called.
+    public func triggerGracefulShutdown() async throws {
+        _ = try await self.send(frame: .init(command: .disconnect, headers: [.init(name: "receipt", value: UUID().uuidString)]))
+        self.channelHandler.triggerGracefulShutdown()
+    }
+
     static func connect(
         address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration,
@@ -99,15 +187,6 @@ public final actor STOMPConnection: Sendable {
         let connection = try await future.get()
         try await connection.waitOnConnected()
         return connection
-    }
-
-    /// Close connection
-    public nonisolated func close() {
-        guard self.isClosed.compareExchange(expected: false, desired: true, successOrdering: .relaxed, failureOrdering: .relaxed).exchanged
-        else {
-            return
-        }
-        self.channel.close(mode: .all, promise: nil)
     }
 
     func waitOnConnected() async throws {
@@ -276,63 +355,5 @@ public final actor STOMPConnection: Sendable {
                 this.channelHandler.cancel(requestID: requestID)
             }
         }
-    }
-
-    /// Send a STOMP frame to the server.
-    ///
-    /// If the frame contains a `receipt` header, this method waits for the corresponding `RECEIPT` frame from the server and returns it.
-    /// If the frame does not contain a `receipt` header, the method returns `nil` immediately after sending the frame.
-    ///
-    /// - Parameter frame: The STOMP frame to send
-    ///
-    /// - Returns: The `RECEIPT` frame from the server if the sent frame contained a `receipt` header, otherwise `nil`
-    @inlinable
-    public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
-        guard frame.headers.contains(where: { $0.name == "receipt" }) else {
-            try self.channelHandler.sendFrameNoWait(frame)
-            return nil
-        }
-
-        return try await self.sendFrame(frame) { newFrame in
-            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == frame.headers.first(where: { $0.name == "receipt" })?.value
-        }
-    }
-
-    /// Send a message to a destination.
-    ///
-    /// - Parameters:
-    ///   - body: The body of the message
-    ///   - destination: The destination to send the message to
-    ///   - contentType: The content type of the message
-    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame
-    public func send(
-        _ body: ByteBuffer,
-        to destination: String,
-        contentType: String = "text/plain",
-        userDefinedHeaders: [STOMPHeader] = []
-    ) async throws {
-        let headers =
-            userDefinedHeaders + [
-                STOMPHeader(name: "destination", value: destination),
-                STOMPHeader(name: "content-length", value: "\(body.readableBytes)"),
-                STOMPHeader(name: "content-type", value: contentType),
-                STOMPHeader(name: "receipt", value: UUID().uuidString),
-            ]
-        _ = try await self.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
-    }
-
-    /// Trigger a graceful shutdown of the STOMP connection.
-    ///
-    /// This method sends a `DISCONNECT` frame to the STOMP server and waits for the `RECEIPT` frame,
-    /// assuring that all previous frames have been received by the server.
-    ///
-    /// > Note: if the server closes its end of the socket too quickly,
-    /// the client might never receive the expected `RECEIPT` frame.
-    /// See the [Connection Lingering](https://stomp.github.io/stomp-specification-1.2.html#Connection_Lingering) section for more information.
-    ///
-    /// > Warning: Clients MUST NOT send any more frames after this method is called.
-    public func triggerGracefulShutdown() async throws {
-        _ = try await self.send(frame: .init(command: .disconnect, headers: [.init(name: "receipt", value: UUID().uuidString)]))
-        self.channelHandler.triggerGracefulShutdown()
     }
 }

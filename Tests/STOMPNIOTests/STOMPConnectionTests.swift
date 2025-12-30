@@ -36,7 +36,7 @@ struct STOMPConnectionTests {
 
             group.addTask {
                 try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.publisherLogger) { connection in
-                    try await connection.send(ByteBuffer(string: "Hello, STOMP over NIO!"), to: "/queue/stomp-nio")
+                    try await connection.send("Hello, STOMP over NIO!", to: "/queue/stomp-nio")
                 }
             }
 
@@ -78,7 +78,7 @@ struct STOMPConnectionTests {
     @Test("Connect with Raw IP Address")
     func rawIPConnect() async throws {
         try await STOMPConnection.withConnection(address: .hostname("127.0.0.1"), logger: self.logger) { connection in
-            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/raw-ip-address")
+            try await connection.send("Test", to: "/queue/raw-ip-address")
         }
     }
     #endif
@@ -141,7 +141,7 @@ struct STOMPConnectionTests {
             logger: self.logger
         ) { connection in
             _ = await #expect(throws: STOMPClientError.timeout) {
-                try await connection.send(ByteBuffer(string: "Test"), to: "/queue/receipt-timeout")
+                try await connection.send("Test", to: "/queue/receipt-timeout")
             }
         }
     }
@@ -158,7 +158,7 @@ struct STOMPConnectionTests {
         try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
             try await connection.triggerGracefulShutdown()
             await #expect(throws: STOMPClientError.connectionClosed) {
-                try await connection.send(ByteBuffer(string: "Test"), to: "/queue/graceful-shutdown")
+                try await connection.send("Test", to: "/queue/graceful-shutdown")
             }
         }
     }
@@ -171,7 +171,7 @@ struct STOMPConnectionTests {
             eventLoop: NIOTSEventLoopGroup.singleton.any(),
             logger: self.logger
         ) { connection in
-            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/nio-transport-services")
+            try await connection.send("Test", to: "/queue/nio-transport-services")
         }
     }
     #endif
@@ -198,7 +198,7 @@ struct STOMPConnectionTests {
             logger: self.logger
         ) { connection in
             try await Task.sleep(for: .seconds(5))
-            try await connection.send(ByteBuffer(string: "Test"), to: "/queue/config-reader")
+            try await connection.send("Test", to: "/queue/config-reader")
         }
     }
 
@@ -247,13 +247,13 @@ struct STOMPConnectionTests {
         try await withThrowingTaskGroup { group in
             group.addTask {
                 await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
-                    try await connection.send(ByteBuffer(), to: "foo")
+                    try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
                 }
             }
             try await withThrowingTaskGroup { group in
                 group.addTask {
                     await #expect(throws: STOMPClientError.cancelledTask) {
-                        try await connection.send(ByteBuffer(), to: "foo")
+                        try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
                     }
                 }
                 // wait for outbound write from both tasks
@@ -279,7 +279,7 @@ struct STOMPConnectionTests {
                     }
 
                     group.addTask {
-                        try await connection.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/sub-transaction")
+                        try await connection.send("Message in Transaction", to: "/queue/sub-transaction")
                     }
 
                     try await group.waitForAll()
@@ -344,7 +344,7 @@ struct STOMPConnectionTests {
                     }
 
                     group.addTask {
-                        try await connection.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/abort-sub-transaction")
+                        try await connection.send("Message in Transaction", to: "/queue/abort-sub-transaction")
                     }
 
                     try await group.waitForAll()
@@ -416,7 +416,7 @@ struct STOMPConnectionTests {
             logger: self.logger
         ) { connection in
             try await Task.sleep(for: .seconds(5))
-            try await connection.send(ByteBuffer(string: "Test after heart-beating"), to: "/queue/heart-beating-broker")
+            try await connection.send("Test after heart-beating", to: "/queue/heart-beating-broker")
         }
     }
 
