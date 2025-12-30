@@ -59,7 +59,7 @@ struct STOMPSubscriptions {
     mutating func addSubscription(
         continuation: STOMPSubscription.Continuation,
         destination: String,
-        ackMode: STOMPAckMode,
+        ackMode: STOMPSubscription.AckMode,
         transactionID: String?
     ) -> SubscriptionRef {
         let id = Self.getSubscriptionID()
@@ -101,11 +101,11 @@ struct STOMPSubscriptions {
 /// Individual subscription associated with one SUBSCRIBE frame
 final class SubscriptionRef: Identifiable {
     let id: UInt
-    let ackMode: STOMPAckMode
+    let ackMode: STOMPSubscription.AckMode
     let transactionID: String?
     let continuation: STOMPSubscription.Continuation
 
-    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPAckMode, transactionID: String?) {
+    init(id: UInt, continuation: STOMPSubscription.Continuation, ackMode: STOMPSubscription.AckMode, transactionID: String?) {
         self.id = id
         self.ackMode = ackMode
         self.transactionID = transactionID

@@ -12,7 +12,7 @@ extension STOMPConnection {
     @inlinable
     public nonisolated func subscribe<Value>(
         to destination: String,
-        ackMode: STOMPAckMode = .auto,
+        ackMode: STOMPSubscription.AckMode = .auto,
         userDefinedHeaders: [STOMPHeader] = [],
         process: (STOMPSubscription) async throws -> Value
     ) async throws -> Value {
@@ -38,7 +38,7 @@ extension STOMPConnection {
     @usableFromInline
     func subscribe(
         destination: String,
-        ackMode: STOMPAckMode,
+        ackMode: STOMPSubscription.AckMode,
         userDefinedHeaders: [STOMPHeader],
         transactionID: String? = nil
     ) async throws -> (UInt, STOMPSubscription) {

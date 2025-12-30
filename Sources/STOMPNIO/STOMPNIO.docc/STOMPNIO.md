@@ -13,6 +13,7 @@ STOMP has been in active use for several years and is supported by many message 
 ### Connections
 
 - ``STOMPConnection``
+- ``STOMPServerAddress``
 - ``STOMPConnectionConfiguration``
 - ``STOMPClientError``
 
@@ -25,4 +26,7 @@ STOMP has been in active use for several years and is supported by many message 
 ### Subscriptions
 
 - ``STOMPSubscription``
-- ``STOMPAckMode``
+
+### Transactions
+
+- ``STOMPTransaction``

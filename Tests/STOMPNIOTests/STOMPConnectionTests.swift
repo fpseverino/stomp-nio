@@ -20,8 +20,8 @@ import NIOTransportServices
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
-    @Test("Pub/Sub", arguments: STOMPAckMode.allCases)
-    func pubSub(ackMode: STOMPAckMode) async throws {
+    @Test("Pub/Sub", arguments: STOMPSubscription.AckMode.allCases)
+    func pubSub(ackMode: STOMPSubscription.AckMode) async throws {
         try await withThrowingTaskGroup { group in
             group.addTask {
                 try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
@@ -44,8 +44,8 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Publish Large Payload", arguments: STOMPAckMode.allCases)
-    func publishLargePayload(ackMode: STOMPAckMode) async throws {
+    @Test("Publish Large Payload", arguments: STOMPSubscription.AckMode.allCases)
+    func publishLargePayload(ackMode: STOMPSubscription.AckMode) async throws {
         let payloadSize = 65537
         let payloadData = Data(count: payloadSize)
         let payload = ByteBufferAllocator().buffer(data: payloadData)
@@ -264,8 +264,8 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Subscription Transaction", arguments: STOMPAckMode.allCases)
-    func subscriptionTransaction(ackMode: STOMPAckMode) async throws {
+    @Test("Subscription Transaction", arguments: STOMPSubscription.AckMode.allCases)
+    func subscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
         try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
             try await connection.withTransaction { transaction in
                 try await withThrowingTaskGroup { group in
@@ -328,8 +328,8 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Abort Subscription Transaction", arguments: [STOMPAckMode.client, .clientIndividual])
-    func abortSubscriptionTransaction(ackMode: STOMPAckMode) async throws {
+    @Test("Abort Subscription Transaction", arguments: [STOMPSubscription.AckMode.client, .clientIndividual])
+    func abortSubscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
         try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
             try? await connection.withTransaction { transaction in
                 try await withThrowingTaskGroup { group in

@@ -4,7 +4,7 @@ import Synchronization
 struct IDGenerator: ~Copyable, Sendable {
     private let atomic: Atomic<Int>
 
-    public init() {
+    init() {
         self.atomic = .init(0)
     }
 

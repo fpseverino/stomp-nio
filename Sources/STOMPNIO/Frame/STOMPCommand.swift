@@ -1,4 +1,4 @@
-/// A STOMP command
+/// A STOMP command.
 public enum STOMPCommand: String, Sendable, CaseIterable {
     // Client commands
     case connect = "CONNECT"

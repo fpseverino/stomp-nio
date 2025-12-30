@@ -358,7 +358,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func subscribe(
         streamContinuation: STOMPSubscription.Continuation,
         destination: String,
-        ackMode: STOMPAckMode,
+        ackMode: STOMPSubscription.AckMode,
         userDefinedHeaders: [STOMPHeader],
         transactionID: String?,
         promise: STOMPPromise<UInt>,
