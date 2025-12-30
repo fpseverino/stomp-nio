@@ -27,7 +27,7 @@ You can create a connection to a STOMP broker and send and receive messages from
 
 ```swift
 try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
-    try await connection.send(ByteBuffer(string: "Hello, STOMP over NIO!"), to: "/queue/a")
+    try await connection.send("Hello, STOMP over NIO!", to: "/queue/a")
 }
 ```
 
