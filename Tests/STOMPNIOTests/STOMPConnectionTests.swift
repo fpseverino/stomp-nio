@@ -176,6 +176,43 @@ struct STOMPConnectionTests {
     }
     #endif
 
+    @Suite("Heart-beating Tests")
+    struct HeartBeatingTests {
+        @Test("Heart-beating with NIOAsyncTestingChannel")
+        func heartBeating() async throws {
+            let channel = NIOAsyncTestingChannel()
+            let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
+            let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
+            try await channel.processConnect(configuration: configuration)
+
+            await channel.testingEventLoop.advanceTime(to: .now())
+            for _ in 1...5 {
+                await channel.testingEventLoop.advanceTime(by: .milliseconds(1100))
+
+                let outbound = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                #expect(outbound == ByteBuffer(string: "\n"))
+            }
+        }
+
+        @Test("Heart-beating with Real Broker")
+        func heartBeatingBroker() async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname),
+                configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
+                logger: self.logger
+            ) { connection in
+                try await Task.sleep(for: .seconds(5))
+                try await connection.send("Test after heart-beating", to: "/queue/heart-beating-broker")
+            }
+        }
+
+        let logger: Logger = {
+            var logger = Logger(label: "HeartBeatingTests")
+            logger.logLevel = .trace
+            return logger
+        }()
+    }
+
     @Test("Configuration from ConfigReader")
     func configReader() async throws {
         let config = ConfigReader(
@@ -202,75 +239,131 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Cancellation")
-    func cancellation() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            await withThrowingTaskGroup { group in
-                group.addTask {
-                    await #expect(throws: STOMPClientError.cancelledTask) {
-                        try await connection.subscribe(to: "/queue/cancellation") { subscription in
-                            for try await _ in subscription {
-                                Issue.record("Should not receive messages")
+    @Suite("Cancellation Tests")
+    struct CancellationTests {
+        @Test("Cancellation")
+        func cancellation() async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                await withThrowingTaskGroup { group in
+                    group.addTask {
+                        await #expect(throws: STOMPClientError.cancelledTask) {
+                            try await connection.subscribe(to: "/queue/cancellation") { subscription in
+                                for try await _ in subscription {
+                                    Issue.record("Should not receive messages")
+                                }
+                            }
+                        }
+                    }
+                    group.cancelAll()
+                }
+            }
+        }
+
+        @Test("Already Cancelled")
+        func alreadyCancelled() async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                await withThrowingTaskGroup(of: Void.self) { group in
+                    group.cancelAll()
+                    group.addTask {
+                        await #expect(throws: STOMPClientError.cancelledTask) {
+                            try await connection.subscribe(to: "/queue/already-cancelled") { subscription in
+                                for try await _ in subscription {
+                                    Issue.record("Should not receive messages")
+                                }
                             }
                         }
                     }
                 }
-                group.cancelAll()
             }
         }
-    }
 
-    @Test("Already Cancelled")
-    func alreadyCancelled() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            await withThrowingTaskGroup(of: Void.self) { group in
-                group.cancelAll()
-                group.addTask {
-                    await #expect(throws: STOMPClientError.cancelledTask) {
-                        try await connection.subscribe(to: "/queue/already-cancelled") { subscription in
-                            for try await _ in subscription {
-                                Issue.record("Should not receive messages")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+        @Test("Connection Close due to Cancellation")
+        func connectionCloseDueToCancellation() async throws {
+            let channel = NIOAsyncTestingChannel()
+            let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
+            try await channel.processConnect()
 
-    @Test("Connection Close due to Cancellation")
-    func connectionCloseDueToCancellation() async throws {
-        let channel = NIOAsyncTestingChannel()
-        let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
-        try await channel.processConnect()
-
-        try await withThrowingTaskGroup { group in
-            group.addTask {
-                await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
-                    try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
-                }
-            }
             try await withThrowingTaskGroup { group in
                 group.addTask {
-                    await #expect(throws: STOMPClientError.cancelledTask) {
+                    await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
                         try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
                     }
                 }
-                // wait for outbound write from both tasks
-                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
-                _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
-                group.cancelAll()
-            }
-        }
-    }
-
-    @Test("Subscription Transaction", arguments: STOMPSubscription.AckMode.allCases)
-    func subscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await connection.withTransaction { transaction in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
-                        try await transaction.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
+                        await #expect(throws: STOMPClientError.cancelledTask) {
+                            try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
+                        }
+                    }
+                    // wait for outbound write from both tasks
+                    _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                    _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
+                    group.cancelAll()
+                }
+            }
+        }
+
+        let logger: Logger = {
+            var logger = Logger(label: "CancellationTests")
+            logger.logLevel = .trace
+            return logger
+        }()
+    }
+
+    @Suite("Transactions Tests")
+    struct TransactionsTests {
+        @Test("Subscription Transaction", arguments: STOMPSubscription.AckMode.allCases)
+        func subscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try await connection.withTransaction { transaction in
+                    try await withThrowingTaskGroup { group in
+                        group.addTask {
+                            try await transaction.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
+                                for try await frame in subscription {
+                                    #expect(String(buffer: frame.body) == "Message in Transaction")
+                                    return
+                                }
+                            }
+                        }
+
+                        group.addTask {
+                            try await connection.send("Message in Transaction", to: "/queue/sub-transaction")
+                        }
+
+                        try await group.waitForAll()
+                    }
+                }
+            }
+
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try await withThrowingTaskGroup { group in
+                    group.addTask {
+                        try await connection.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive the message, as the transaction has been aborted")
+                            }
+                        }
+                    }
+
+                    // Give some time for the message to be (not) delivered
+                    try await Task.sleep(for: .seconds(1))
+                    group.cancelAll()
+                }
+            }
+        }
+
+        @Test("Send Transaction")
+        func sendTransaction() async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try await withThrowingTaskGroup { group in
+                    group.addTask {
+                        try await connection.withTransaction { transaction in
+                            try await transaction.send("Message in Transaction", to: "/queue/send-transaction")
+                        }
+                    }
+
+                    group.addTask {
+                        try await connection.subscribe(to: "/queue/send-transaction") { subscription in
                             for try await frame in subscription {
                                 #expect(String(buffer: frame.body) == "Message in Transaction")
                                 return
@@ -278,146 +371,82 @@ struct STOMPConnectionTests {
                         }
                     }
 
-                    group.addTask {
-                        try await connection.send("Message in Transaction", to: "/queue/sub-transaction")
-                    }
-
                     try await group.waitForAll()
                 }
             }
         }
 
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await withThrowingTaskGroup { group in
-                group.addTask {
-                    try await connection.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
-                        for try await _ in subscription {
-                            Issue.record("Should not receive the message, as the transaction has been aborted")
+        @Test("Abort Subscription Transaction", arguments: [STOMPSubscription.AckMode.client, .clientIndividual])
+        func abortSubscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try? await connection.withTransaction { transaction in
+                    try await withThrowingTaskGroup { group in
+                        group.addTask {
+                            try await transaction.subscribe(to: "/queue/abort-sub-transaction", ackMode: ackMode) { subscription in
+                                for try await frame in subscription {
+                                    // The message is received and the ACK is sent, but as part of the transaction
+                                    #expect(String(buffer: frame.body) == "Message in Transaction")
+                                    return
+                                }
+                            }
                         }
+
+                        group.addTask {
+                            try await connection.send("Message in Transaction", to: "/queue/abort-sub-transaction")
+                        }
+
+                        try await group.waitForAll()
+                    }
+
+                    throw AbortTransaction()
+                    // The automatic ACK, sent during the transaction, is rolled back
+                }
+            }
+
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try await connection.subscribe(to: "/queue/abort-sub-transaction", ackMode: .clientIndividual) { subscription in
+                    for try await frame in subscription {
+                        // The queue still has the message, since the ACK was rolled back
+                        #expect(String(buffer: frame.body) == "Message in Transaction")
+                        return
                     }
                 }
-
-                // Give some time for the message to be (not) delivered
-                try await Task.sleep(for: .seconds(1))
-                group.cancelAll()
             }
         }
-    }
 
-    @Test("Send Transaction")
-    func sendTransaction() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await withThrowingTaskGroup { group in
-                group.addTask {
-                    try await connection.withTransaction { transaction in
-                        try await transaction.send("Message in Transaction", to: "/queue/send-transaction")
-                    }
-                }
-
-                group.addTask {
-                    try await connection.subscribe(to: "/queue/send-transaction") { subscription in
-                        for try await frame in subscription {
-                            #expect(String(buffer: frame.body) == "Message in Transaction")
-                            return
-                        }
-                    }
-                }
-
-                try await group.waitForAll()
-            }
-        }
-    }
-
-    @Test("Abort Subscription Transaction", arguments: [STOMPSubscription.AckMode.client, .clientIndividual])
-    func abortSubscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try? await connection.withTransaction { transaction in
+        @Test("Abort Send Transaction")
+        func abortSendTransaction() async throws {
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
-                        try await transaction.subscribe(to: "/queue/abort-sub-transaction", ackMode: ackMode) { subscription in
-                            for try await frame in subscription {
-                                // The message is received and the ACK is sent, but as part of the transaction
-                                #expect(String(buffer: frame.body) == "Message in Transaction")
-                                return
+                        try await connection.withTransaction { transaction in
+                            try await transaction.send("Message in Transaction", to: "/queue/abort-send-transaction")
+                            throw AbortTransaction()
+                        }
+                    }
+
+                    group.addTask {
+                        try await connection.subscribe(to: "/queue/abort-send-transaction") { subscription in
+                            for try await _ in subscription {
+                                Issue.record("Should not receive the message, as it was sent in a transaction that was aborted")
                             }
                         }
                     }
 
-                    group.addTask {
-                        try await connection.send("Message in Transaction", to: "/queue/abort-sub-transaction")
-                    }
-
-                    try await group.waitForAll()
-                }
-
-                throw AbortTransaction()
-                // The automatic ACK, sent during the transaction, is rolled back
-            }
-        }
-
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await connection.subscribe(to: "/queue/abort-sub-transaction", ackMode: .clientIndividual) { subscription in
-                for try await frame in subscription {
-                    // The queue still has the message, since the ACK was rolled back
-                    #expect(String(buffer: frame.body) == "Message in Transaction")
-                    return
+                    // Give some time for the message to be (not) delivered
+                    try await Task.sleep(for: .seconds(1))
+                    group.cancelAll()
                 }
             }
         }
-    }
 
-    @Test("Abort Send Transaction")
-    func abortSendTransaction() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await withThrowingTaskGroup { group in
-                group.addTask {
-                    try await connection.withTransaction { transaction in
-                        try await transaction.send("Message in Transaction", to: "/queue/abort-send-transaction")
-                        throw AbortTransaction()
-                    }
-                }
+        let logger: Logger = {
+            var logger = Logger(label: "TransactionsTests")
+            logger.logLevel = .trace
+            return logger
+        }()
 
-                group.addTask {
-                    try await connection.subscribe(to: "/queue/abort-send-transaction") { subscription in
-                        for try await _ in subscription {
-                            Issue.record("Should not receive the message, as it was sent in a transaction that was aborted")
-                        }
-                    }
-                }
-
-                // Give some time for the message to be (not) delivered
-                try await Task.sleep(for: .seconds(1))
-                group.cancelAll()
-            }
-        }
-    }
-
-    @Test("Heart-beating")
-    func heartBeating() async throws {
-        let channel = NIOAsyncTestingChannel()
-        let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
-        let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
-        try await channel.processConnect(configuration: configuration)
-
-        await channel.testingEventLoop.advanceTime(to: .now())
-        for _ in 1...5 {
-            await channel.testingEventLoop.advanceTime(by: .milliseconds(1100))
-
-            let outbound = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
-            #expect(outbound == ByteBuffer(string: "\n"))
-        }
-    }
-
-    @Test("Heart-beating with Real Broker")
-    func heartBeatingBroker() async throws {
-        try await STOMPConnection.withConnection(
-            address: .hostname(Self.hostname),
-            configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
-            logger: self.logger
-        ) { connection in
-            try await Task.sleep(for: .seconds(5))
-            try await connection.send("Test after heart-beating", to: "/queue/heart-beating-broker")
-        }
+        struct AbortTransaction: Error {}
     }
 
     let logger: Logger = {
@@ -437,6 +466,4 @@ struct STOMPConnectionTests {
         logger.logLevel = .trace
         return logger
     }()
-
-    struct AbortTransaction: Error {}
 }
