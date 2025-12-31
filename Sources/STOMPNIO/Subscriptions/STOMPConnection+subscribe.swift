@@ -1,5 +1,6 @@
 extension STOMPConnection {
     /// Subscribe to a destination.
+    /// All messages received from the subscription will be acknowledged automatically.
     ///
     /// The subscription is automatically unsubscribed when the `process` closure returns or throws.
     ///

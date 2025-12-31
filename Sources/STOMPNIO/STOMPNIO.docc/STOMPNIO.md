@@ -29,4 +29,5 @@ STOMP has been in active use for several years and is supported by many message 
 
 ### Transactions
 
+- <doc:Transactions-article>
 - ``STOMPTransaction``
