@@ -1,10 +1,5 @@
+import Algorithms
 import NIOCore
-
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
 struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
     func decode(buffer: inout ByteBuffer) throws(ParseError) -> STOMPFrame? {
@@ -39,26 +34,26 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
                 throw ParseError.malformedHeader(line)
             }
             let name = STOMPHeader.Name(String(line[..<colonIndex]))
-            let valueStart = line.index(after: colonIndex)
-            let value = String(line[valueStart...])
+            let valueStartIndex = line.index(after: colonIndex)
+            let value = String(line[valueStartIndex...])
 
             headers.append(STOMPHeader(name: name, value: value))
 
             if contentLength == nil && name == .contentLength {
-                guard let len = Int(value.trimmingCharacters(in: .whitespaces)) else {
+                guard let contentLengthValue = Int(value.trimming(while: \.isWhitespace)), contentLengthValue >= 0 else {
                     throw ParseError.invalidContentLength(value)
                 }
-                if len < 0 { throw ParseError.invalidContentLength(value) }
-                contentLength = len
+                contentLength = contentLengthValue
             }
         }
 
         // 3) Read body and the required NULL terminator
         let body: ByteBuffer
-        if let len = contentLength {
-            // Need exactly 'len' octets for body plus one NULL
-            guard buffer.readableBytes >= len + 1 else { return needMoreData() }
-            guard let slice = buffer.readSlice(length: len) else { return needMoreData() }
+        if let contentLength {
+            // Need exactly 'contentLength' octets for body plus one NULL
+            guard buffer.readableBytes >= contentLength + 1, let slice = buffer.readSlice(length: contentLength) else {
+                return needMoreData()
+            }
             body = slice
             // Expect NULL terminator
             guard let nullByte: UInt8 = buffer.readInteger(), nullByte == 0 else {
@@ -69,8 +64,8 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
             guard let relNullIndex = buffer.readableBytesView.firstIndex(of: 0) else {
                 return needMoreData()
             }
-            let bodyLen = buffer.readableBytesView.distance(from: buffer.readableBytesView.startIndex, to: relNullIndex)
-            guard let slice = buffer.readSlice(length: bodyLen) else { return needMoreData() }
+            let bodyLength = buffer.readableBytesView.distance(from: buffer.readableBytesView.startIndex, to: relNullIndex)
+            guard let slice = buffer.readSlice(length: bodyLength) else { return needMoreData() }
             body = slice
             // Consume NULL terminator
             _ = buffer.readInteger(as: UInt8.self)
@@ -88,7 +83,7 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
 
     // MARK: - Helpers
 
-    enum ParseError: Error, CustomStringConvertible {
+    enum ParseError: Error, CustomStringConvertible, Equatable {
         case invalidCommand(String)
         case malformedHeader(String)
         case invalidContentLength(String)
