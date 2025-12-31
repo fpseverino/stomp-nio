@@ -310,7 +310,7 @@ struct STOMPConnectionTests {
             try await withThrowingTaskGroup { group in
                 group.addTask {
                     try await connection.withTransaction { transaction in
-                        try await transaction.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/send-transaction")
+                        try await transaction.send("Message in Transaction", to: "/queue/send-transaction")
                     }
                 }
 
@@ -372,7 +372,7 @@ struct STOMPConnectionTests {
             try await withThrowingTaskGroup { group in
                 group.addTask {
                     try await connection.withTransaction { transaction in
-                        try await transaction.send(ByteBuffer(string: "Message in Transaction"), to: "/queue/abort-send-transaction")
+                        try await transaction.send("Message in Transaction", to: "/queue/abort-send-transaction")
                         throw AbortTransaction()
                     }
                 }

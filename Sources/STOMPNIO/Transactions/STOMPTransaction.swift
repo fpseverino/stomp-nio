@@ -16,14 +16,14 @@ public struct STOMPTransaction: Sendable {
     /// Send a message to a destination during this transaction.
     ///
     /// - Parameters:
-    ///   - body: The body of the message
-    ///   - destination: The destination to send the message to
-    ///   - contentType: The content type of the message
-    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame
+    ///   - body: The body of the message.
+    ///   - destination: The destination to send the message to.
+    ///   - contentType: The content type of the message.
+    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame.
     public func send(
         _ body: ByteBuffer,
         to destination: String,
-        contentType: String = "text/plain",
+        contentType: String,
         userDefinedHeaders: STOMPHeaders = [:]
     ) async throws {
         let headers: STOMPHeaders =
@@ -34,6 +34,27 @@ public struct STOMPTransaction: Sendable {
                 .transaction: self.id,
             ]
         _ = try await self.connection.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
+    }
+
+    /// Send a text message to a destination during this transaction.
+    ///
+    /// - Parameters:
+    ///   - body: The body of the message.
+    ///   - destination: The destination to send the message to.
+    ///   - contentType: The content type of the message. Defaults to `text/plain`.
+    ///   - userDefinedHeaders: Additional headers to include in the `SEND` frame.
+    public func send(
+        _ body: String,
+        to destination: String,
+        contentType: String = "text/plain",
+        userDefinedHeaders: STOMPHeaders = [:]
+    ) async throws {
+        try await self.send(
+            ByteBuffer(string: body),
+            to: destination,
+            contentType: contentType,
+            userDefinedHeaders: userDefinedHeaders
+        )
     }
 
     /// Subscribe to a destination.
