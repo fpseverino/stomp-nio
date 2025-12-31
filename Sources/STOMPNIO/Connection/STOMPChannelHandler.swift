@@ -88,16 +88,16 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func setInitialized(context: ChannelHandlerContext) {
         let outgoingHeartBeat = self.configuration.heartBeat.outgoing.nanoseconds / 1_000_000
         let incomingHeartBeat = self.configuration.heartBeat.incoming.nanoseconds / 1_000_000
-        var headers: [STOMPHeader] = [
-            .init(name: "accept-version", value: "1.0,1.1,1.2"),
-            .init(name: "heart-beat", value: "\(outgoingHeartBeat),\(incomingHeartBeat)"),
+        var headers: STOMPHeaders = [
+            .acceptVersion: "1.0,1.1,1.2",
+            .heartBeat: "\(outgoingHeartBeat),\(incomingHeartBeat)",
         ]
         if let authentication = self.configuration.authentication {
-            headers.append(.init(name: "login", value: authentication.login))
-            headers.append(.init(name: "passcode", value: authentication.passcode))
+            headers.append(.init(name: .login, value: authentication.login))
+            headers.append(.init(name: .passcode, value: authentication.passcode))
         }
         if let virtualHost = self.configuration.virtualHost {
-            headers.append(.init(name: "host", value: virtualHost))
+            headers.append(.init(name: .host, value: virtualHost))
         }
         let connectFrame = STOMPFrame(command: .connect, headers: headers)
 
@@ -214,9 +214,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             // Handle heart-beat negotiation on CONNECTED frame
             if frame.command == .connected,
                 self.configuration.heartBeat.outgoing > .milliseconds(0),
-                let heartBeatHeader = frame.headers.first(where: { $0.name == "heart-beat" })
+                let heartBeatHeader = frame.headers[.heartBeat]
             {
-                let components = heartBeatHeader.value.split(separator: ",").compactMap { Int64($0) }
+                let components = heartBeatHeader.split(separator: ",").compactMap { Int64($0) }
                 if components.count == 2 {
                     let serverIncomingFrequency = components[1]
                     if serverIncomingFrequency > 0 {
@@ -236,21 +236,21 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             break
         case .messageReceived:
             do {
-                guard let subscriptionHeader = frame.headers.first(where: { $0.name == "subscription" }),
-                    let messageIDHeader = frame.headers.first(where: { $0.name == "message-id" })
+                guard let subscriptionHeader = frame.headers[.subscription],
+                    let messageIDHeader = frame.headers[.messageID]
                 else {
                     throw STOMPClientError.missingHeader(message: "Missing subscription or message-id header in MESSAGE frame")
                 }
-                if let subscriptionID = UInt(subscriptionHeader.value), self.subscriptions.shouldAcknowledge(id: subscriptionID) {
-                    var headers = [
-                        STOMPHeader(name: "subscription", value: subscriptionHeader.value),
-                        STOMPHeader(name: "message-id", value: messageIDHeader.value),
+                if let subscriptionID = UInt(subscriptionHeader), self.subscriptions.shouldAcknowledge(id: subscriptionID) {
+                    var headers: STOMPHeaders = [
+                        .subscription: subscriptionHeader,
+                        .messageID: messageIDHeader,
                     ]
-                    if let ackHeader = frame.headers.first(where: { $0.name == "ack" }).map({ STOMPHeader(name: "id", value: $0.value) }) {
+                    if let ackHeader = frame.headers[values: .ack].first.map({ STOMPHeader(name: .id, value: $0) }) {
                         headers.append(ackHeader)
                     }
                     if let transactionID = self.subscriptions.transactionID(for: subscriptionID) {
-                        headers.append(STOMPHeader(name: "transaction", value: transactionID))
+                        headers.append(STOMPHeader(name: .transaction, value: transactionID))
                     }
                     let ackFrame = STOMPFrame(
                         command: .ack,
@@ -359,7 +359,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         streamContinuation: STOMPSubscription.Continuation,
         destination: String,
         ackMode: STOMPSubscription.AckMode,
-        userDefinedHeaders: [STOMPHeader],
+        userDefinedHeaders: STOMPHeaders,
         transactionID: String?,
         promise: STOMPPromise<UInt>,
         requestID: Int
@@ -375,15 +375,15 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         let receiptID = UUID().uuidString
         let subscribeFrame = STOMPFrame(
             command: .subscribe,
-            headers: [
-                STOMPHeader(name: "destination", value: destination),
-                STOMPHeader(name: "id", value: String(subscriptionID)),
-                STOMPHeader(name: "ack", value: ackMode.rawValue),
-                STOMPHeader(name: "receipt", value: receiptID),
-            ] + userDefinedHeaders
+            headers: userDefinedHeaders + [
+                .destination: destination,
+                .id: String(subscriptionID),
+                .ack: ackMode.rawValue,
+                .receipt: receiptID,
+            ]
         )
         self.sendFrame(subscribeFrame, requestID: requestID) { newFrame in
-            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
+            newFrame.headers[.receiptID] == receiptID
         }.assumeIsolated().whenComplete { result in
             switch result {
             case .success:
@@ -397,7 +397,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
     func unsubscribe(
         id: UInt,
-        userDefinedHeaders: [STOMPHeader],
+        userDefinedHeaders: STOMPHeaders,
         promise: STOMPPromise<Void>,
         requestID: Int
     ) {
@@ -406,13 +406,13 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         let receiptID = UUID().uuidString
         let unsubscribeFrame = STOMPFrame(
             command: .unsubscribe,
-            headers: [
-                STOMPHeader(name: "id", value: String(id)),
-                STOMPHeader(name: "receipt", value: receiptID),
-            ] + userDefinedHeaders
+            headers: userDefinedHeaders + [
+                .id: String(id),
+                .receipt: receiptID,
+            ]
         )
         self.sendFrame(unsubscribeFrame, requestID: requestID) { newFrame in
-            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == receiptID
+            newFrame.headers[.receiptID] == receiptID
         }.assumeIsolated().whenComplete { result in
             switch result {
             case .success:

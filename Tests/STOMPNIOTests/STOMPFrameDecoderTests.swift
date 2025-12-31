@@ -19,8 +19,8 @@ struct STOMPFrameDecoderTests {
         let frame = try #require(try decoder.decode(buffer: &buffer))
         #expect(frame.command == .connect)
         #expect(frame.headers.count == 2)
-        #expect(frame.headers[0] == STOMPHeader(name: "accept-version", value: "1.2"))
-        #expect(frame.headers[1] == STOMPHeader(name: "host", value: "stomp.github.org"))
+        #expect(frame.headers[0] == STOMPHeader(name: .acceptVersion, value: "1.2"))
+        #expect(frame.headers[1] == STOMPHeader(name: .host, value: "stomp.github.org"))
         #expect(frame.body.readableBytes == 0)
     }
 
@@ -37,7 +37,7 @@ struct STOMPFrameDecoderTests {
 
         let frame = try #require(try decoder.decode(buffer: &buffer))
         #expect(frame.command == .send)
-        #expect(frame.headers.contains(where: { $0.name == "content-length" && $0.value == "5" }))
+        #expect(frame.headers.contains(where: { $0.name == .contentLength && $0.value == "5" }))
         #expect(frame.body.getString(at: frame.body.readerIndex, length: frame.body.readableBytes) == "hello")
     }
 
@@ -69,7 +69,7 @@ struct STOMPFrameDecoderTests {
 
         let frame = try #require(try decoder.decode(buffer: &buffer))
         #expect(frame.command == .connect)
-        #expect(frame.headers.contains(where: { $0.name == "accept-version" && $0.value == "1.2" }))
+        #expect(frame.headers.contains(where: { $0.name == .acceptVersion && $0.value == "1.2" }))
     }
 
     @Test("Consume trailing EOLs after NULL terminator")

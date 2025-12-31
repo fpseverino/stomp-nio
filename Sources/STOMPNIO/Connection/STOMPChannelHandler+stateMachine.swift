@@ -134,7 +134,7 @@ extension STOMPChannelHandler {
                     return .succeedTask(state.connectTask, .cancel)
                 case .error:
                     let error = STOMPClientError.errorFrame(
-                        message: frame.headers.first(where: { $0.name == "message" })?.value,
+                        message: frame.headers[.message],
                         body: String(buffer: frame.body)
                     )
                     self = .closed(error)
@@ -177,7 +177,7 @@ extension STOMPChannelHandler {
                     return .unhandledTask
                 case .error:
                     let error = STOMPClientError.errorFrame(
-                        message: frame.headers.first(where: { $0.name == "message" })?.value,
+                        message: frame.headers[.message],
                         body: String(buffer: frame.body)
                     )
                     self = .connected(state)
@@ -233,7 +233,7 @@ extension STOMPChannelHandler {
                     return .unhandledTask
                 case .error:
                     let error = STOMPClientError.errorFrame(
-                        message: frame.headers.first(where: { $0.name == "message" })?.value,
+                        message: frame.headers[.message],
                         body: String(buffer: frame.body)
                     )
                     self = .closed(error)

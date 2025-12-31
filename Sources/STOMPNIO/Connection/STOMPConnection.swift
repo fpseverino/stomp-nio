@@ -91,13 +91,13 @@ public final actor STOMPConnection: Sendable {
     /// - Returns: The `RECEIPT` frame from the server if the sent frame contained a `receipt` header, otherwise `nil`
     @inlinable
     public func send(frame: STOMPFrame) async throws -> STOMPFrame? {
-        guard frame.headers.contains(where: { $0.name == "receipt" }) else {
+        guard frame.headers.contains(.receipt) else {
             try self.channelHandler.sendFrameNoWait(frame)
             return nil
         }
 
         return try await self.sendFrame(frame) { newFrame in
-            newFrame.headers.first(where: { $0.name == "receipt-id" })?.value == frame.headers.first(where: { $0.name == "receipt" })?.value
+            newFrame.headers[.receiptID] == frame.headers[.receipt]
         }
     }
 
@@ -112,14 +112,14 @@ public final actor STOMPConnection: Sendable {
         _ body: ByteBuffer,
         to destination: String,
         contentType: String,
-        userDefinedHeaders: [STOMPHeader] = []
+        userDefinedHeaders: STOMPHeaders = [:]
     ) async throws {
-        let headers =
+        let headers: STOMPHeaders =
             userDefinedHeaders + [
-                STOMPHeader(name: "destination", value: destination),
-                STOMPHeader(name: "content-length", value: "\(body.readableBytes)"),
-                STOMPHeader(name: "content-type", value: contentType),
-                STOMPHeader(name: "receipt", value: UUID().uuidString),
+                .destination: destination,
+                .contentLength: "\(body.readableBytes)",
+                .contentType: contentType,
+                .receipt: UUID().uuidString,
             ]
         _ = try await self.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
     }
@@ -135,7 +135,7 @@ public final actor STOMPConnection: Sendable {
         _ body: String,
         to destination: String,
         contentType: String = "text/plain",
-        userDefinedHeaders: [STOMPHeader] = []
+        userDefinedHeaders: STOMPHeaders = [:]
     ) async throws {
         try await self.send(
             ByteBuffer(string: body),
@@ -156,7 +156,7 @@ public final actor STOMPConnection: Sendable {
     ///
     /// > Warning: Clients MUST NOT send any more frames after this method is called.
     public func triggerGracefulShutdown() async throws {
-        _ = try await self.send(frame: .init(command: .disconnect, headers: [.init(name: "receipt", value: UUID().uuidString)]))
+        _ = try await self.send(frame: .init(command: .disconnect, headers: [.receipt: UUID().uuidString]))
         self.channelHandler.triggerGracefulShutdown()
     }
 

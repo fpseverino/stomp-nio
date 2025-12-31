@@ -19,7 +19,7 @@ extension STOMPConnection {
         _ = try await self.send(
             frame: .init(
                 command: .begin,
-                headers: [.init(name: "transaction", value: transactionID)]
+                headers: [.transaction: transactionID]
             )
         )
 
@@ -30,7 +30,7 @@ extension STOMPConnection {
             _ = try await self.send(
                 frame: .init(
                     command: .commit,
-                    headers: [.init(name: "transaction", value: transactionID)]
+                    headers: [.transaction: transactionID]
                 )
             )
             return value
@@ -39,7 +39,7 @@ extension STOMPConnection {
                 _ = try await self.send(
                     frame: .init(
                         command: .abort,
-                        headers: [.init(name: "transaction", value: transactionID)]
+                        headers: [.transaction: transactionID]
                     )
                 )
             }

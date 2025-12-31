@@ -24,14 +24,14 @@ public struct STOMPTransaction: Sendable {
         _ body: ByteBuffer,
         to destination: String,
         contentType: String = "text/plain",
-        userDefinedHeaders: [STOMPHeader] = []
+        userDefinedHeaders: STOMPHeaders = [:]
     ) async throws {
-        let headers =
+        let headers: STOMPHeaders =
             userDefinedHeaders + [
-                STOMPHeader(name: "destination", value: destination),
-                STOMPHeader(name: "content-length", value: "\(body.readableBytes)"),
-                STOMPHeader(name: "content-type", value: contentType),
-                STOMPHeader(name: "transaction", value: self.id),
+                .destination: destination,
+                .contentLength: "\(body.readableBytes)",
+                .contentType: contentType,
+                .transaction: self.id,
             ]
         _ = try await self.connection.send(frame: STOMPFrame(command: .send, headers: headers, body: body))
     }
@@ -51,7 +51,7 @@ public struct STOMPTransaction: Sendable {
     public nonisolated func subscribe<Value>(
         to destination: String,
         ackMode: STOMPSubscription.AckMode = .auto,
-        userDefinedHeaders: [STOMPHeader] = [],
+        userDefinedHeaders: STOMPHeaders = [:],
         process: (STOMPSubscription) async throws -> Value
     ) async throws -> Value {
         let (id, stream) = try await self.connection.subscribe(

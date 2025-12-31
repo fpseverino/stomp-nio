@@ -16,7 +16,7 @@ struct STOMPSubscriptions {
 
     /// We received a message
     mutating func notify(_ message: STOMPFrame) throws {
-        guard let subscriptionHeader = message.headers.first(where: { $0.name == "subscription" })?.value else {
+        guard let subscriptionHeader = message.headers[.subscription] else {
             let error = STOMPClientError.missingHeader(message: "MESSAGE frame doesn't have a subscription header")
             // Push error to all subscriptions on this destination.
             // We're about to close the destination, we should tell them why

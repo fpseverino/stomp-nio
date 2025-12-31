@@ -13,7 +13,7 @@ extension STOMPConnection {
     public nonisolated func subscribe<Value>(
         to destination: String,
         ackMode: STOMPSubscription.AckMode = .auto,
-        userDefinedHeaders: [STOMPHeader] = [],
+        userDefinedHeaders: STOMPHeaders = [:],
         process: (STOMPSubscription) async throws -> Value
     ) async throws -> Value {
         let (id, stream) = try await self.subscribe(destination: destination, ackMode: ackMode, userDefinedHeaders: userDefinedHeaders)
@@ -39,7 +39,7 @@ extension STOMPConnection {
     func subscribe(
         destination: String,
         ackMode: STOMPSubscription.AckMode,
-        userDefinedHeaders: [STOMPHeader],
+        userDefinedHeaders: STOMPHeaders,
         transactionID: String? = nil
     ) async throws -> (UInt, STOMPSubscription) {
         let (stream, streamContinuation) = STOMPSubscription.makeStream()
@@ -61,7 +61,7 @@ extension STOMPConnection {
     }
 
     @usableFromInline
-    func unsubscribe(id: UInt, userDefinedHeaders: [STOMPHeader]) async throws {
+    func unsubscribe(id: UInt, userDefinedHeaders: STOMPHeaders) async throws {
         try await withCheckedThrowingContinuation { continuation in
             self.channelHandler.unsubscribe(
                 id: id,

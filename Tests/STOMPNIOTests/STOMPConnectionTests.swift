@@ -109,9 +109,9 @@ struct STOMPConnectionTests {
             let frame = STOMPFrame(
                 command: .send,
                 headers: [
-                    STOMPHeader(name: "destination", value: "/queue/send-frame"),
-                    STOMPHeader(name: "content-type", value: "text/plain"),
-                    STOMPHeader(name: "receipt", value: "sendFrame"),
+                    .destination: "/queue/send-frame",
+                    .contentType: "text/plain",
+                    .receipt: "sendFrame",
                 ],
                 body: ByteBuffer(string: "Test Message")
             )
