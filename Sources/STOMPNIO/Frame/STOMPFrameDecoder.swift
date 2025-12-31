@@ -20,7 +20,7 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
         guard let commandLine = readLine(&buffer) else {
             return needMoreData()
         }
-        guard let command = STOMPCommand(rawValue: commandLine) else {
+        guard let command = STOMPFrame.Command(rawValue: commandLine) else {
             throw ParseError.invalidCommand(commandLine)
         }
 

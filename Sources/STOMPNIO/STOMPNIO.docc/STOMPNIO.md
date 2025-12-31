@@ -20,7 +20,6 @@ STOMP has been in active use for several years and is supported by many message 
 ### Frames
 
 - ``STOMPFrame``
-- ``STOMPCommand``
 - ``STOMPHeaders``
 - ``STOMPHeader``
 

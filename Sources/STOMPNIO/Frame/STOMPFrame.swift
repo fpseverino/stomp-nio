@@ -3,7 +3,7 @@ public import NIOCore
 /// A STOMP frame.
 public struct STOMPFrame: Sendable, Equatable {
     /// The command string of the frame.
-    public var command: STOMPCommand
+    public var command: Command
     /// The headers of the frame.
     public var headers: STOMPHeaders
     /// Body bytes up to (but not including) `NULL` terminator.
@@ -15,7 +15,7 @@ public struct STOMPFrame: Sendable, Equatable {
     ///   - command: The command of the frame.
     ///   - headers: The headers of the frame.
     ///   - body: Body bytes.
-    public init(command: STOMPCommand, headers: STOMPHeaders, body: ByteBuffer = ByteBuffer()) {
+    public init(command: Command, headers: STOMPHeaders, body: ByteBuffer = ByteBuffer()) {
         self.command = command
         self.headers = headers
         self.body = body
@@ -27,7 +27,7 @@ public struct STOMPFrame: Sendable, Equatable {
     ///   - command: The command of the frame.
     ///   - headers: The headers of the frame.
     ///   - body: Body bytes.
-    public init(command: STOMPCommand, headers: [STOMPHeader], body: ByteBuffer = ByteBuffer()) {
+    public init(command: Command, headers: [STOMPHeader], body: ByteBuffer = ByteBuffer()) {
         self.command = command
         self.headers = STOMPHeaders(headers: headers)
         self.body = body
