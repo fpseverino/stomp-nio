@@ -1,23 +1,26 @@
-import Foundation
 import NIOCore
 
-struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
-    typealias InboundOut = STOMPFrame
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
-    func decode(buffer: inout ByteBuffer) throws -> STOMPFrame? {
+struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
+    func decode(buffer: inout ByteBuffer) throws(ParseError) -> STOMPFrame? {
         let originalReaderIndex = buffer.readerIndex
 
-        // Helper to reset and return nil when more data is needed
+        /// Helper to reset and return `nil` when more data is needed
         func needMoreData() -> STOMPFrame? {
             buffer.moveReaderIndex(to: originalReaderIndex)
             return nil
         }
 
         // Skip any leading heart-beat EOLs (LF or CRLF) that may appear between frames
-        skipEOLs(&buffer)
+        Self.skipEOLs(in: &buffer)
 
         // 1) Read command line (terminated by EOL = [CR] LF)
-        guard let commandLine = readLine(&buffer) else {
+        guard let commandLine = Self.readLine(from: &buffer) else {
             return needMoreData()
         }
         guard let command = STOMPFrame.Command(rawValue: commandLine) else {
@@ -29,19 +32,19 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
         var contentLength: Int? = nil
 
         while true {
-            guard let line = readLine(&buffer) else { return needMoreData() }
+            guard let line = Self.readLine(from: &buffer) else { return needMoreData() }
             if line.isEmpty { break }  // empty line separates headers and body
 
             guard let colonIndex = line.firstIndex(of: ":") else {
                 throw ParseError.malformedHeader(line)
             }
-            let name = String(line[..<colonIndex])
+            let name = STOMPHeader.Name(String(line[..<colonIndex]))
             let valueStart = line.index(after: colonIndex)
             let value = String(line[valueStart...])
 
             headers.append(STOMPHeader(name: name, value: value))
 
-            if contentLength == nil && name.caseInsensitiveCompare("content-length") == .orderedSame {
+            if contentLength == nil && name == .contentLength {
                 guard let len = Int(value.trimmingCharacters(in: .whitespaces)) else {
                     throw ParseError.invalidContentLength(value)
                 }
@@ -74,18 +77,18 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
         }
 
         // 4) Consume any trailing EOLs after NULL (heartbeat spacing between frames)
-        skipEOLs(&buffer)
+        Self.skipEOLs(in: &buffer)
 
         return STOMPFrame(command: command, headers: headers, body: body)
     }
 
-    func decodeLast(buffer: inout ByteBuffer, seenEOF _: Bool) throws -> STOMPFrame? {
+    func decodeLast(buffer: inout ByteBuffer, seenEOF _: Bool) throws(ParseError) -> STOMPFrame? {
         try self.decode(buffer: &buffer)
     }
 
     // MARK: - Helpers
 
-    internal enum ParseError: Error, CustomStringConvertible {
+    enum ParseError: Error, CustomStringConvertible {
         case invalidCommand(String)
         case malformedHeader(String)
         case invalidContentLength(String)
@@ -93,16 +96,20 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
 
         var description: String {
             switch self {
-            case .invalidCommand(let cmd): return "Invalid STOMP command: \(cmd)"
-            case .malformedHeader(let line): return "Malformed header line: \(line)"
-            case .invalidContentLength(let v): return "Invalid content-length: \(v)"
-            case .missingNullTerminator: return "Missing NULL terminator after body"
+            case .invalidCommand(let command): "Invalid STOMP command: \(command)"
+            case .malformedHeader(let line): "Malformed header line: \(line)"
+            case .invalidContentLength(let value): "Invalid content-length: \(value)"
+            case .missingNullTerminator: "Missing NULL terminator after body"
             }
         }
     }
 
-    // Read a line terminated by EOL = [CR] LF. Returns the line content without CR/LF.
-    private func readLine(_ buffer: inout ByteBuffer) -> String? {
+    /// Read a line terminated by EOL = [CR] LF.
+    ///
+    /// - Parameter buffer: The buffer to read from.
+    ///
+    /// - Returns: The line content without CR/LF.
+    private static func readLine(from buffer: inout ByteBuffer) -> String? {
         // Find LF in the readable view
         guard let lfIndex = buffer.readableBytesView.firstIndex(of: 10) else { return nil }
         let lengthToLF = buffer.readableBytesView.distance(from: buffer.readableBytesView.startIndex, to: lfIndex)
@@ -126,8 +133,10 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
         return lineSlice.readString(length: lineSlice.readableBytes) ?? ""
     }
 
-    // Consume zero or more EOLs (LF or CRLF)
-    private func skipEOLs(_ buffer: inout ByteBuffer) {
+    /// Consume zero or more EOLs (LF or CRLF).
+    ///
+    /// - Parameter buffer: The buffer to consume from.
+    private static func skipEOLs(in buffer: inout ByteBuffer) {
         while buffer.readableBytes > 0 {
             if let first: UInt8 = buffer.getInteger(at: buffer.readerIndex, as: UInt8.self) {
                 if first == 10 {  // LF
