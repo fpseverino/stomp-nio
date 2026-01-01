@@ -115,6 +115,11 @@ extension STOMPHeader.Name {
 
     /// A short description of the error.
     public static var message: Self { "message" }
+
+    /// STOMP brokers may support the `selector` header
+    /// which allows you to specify an [SQL 92 selector](http://activemq.apache.org/selectors.html) on the message headers
+    /// which acts as a filter for content based routing.
+    public static var selector: Self { "selector" }
 }
 
 extension STOMPHeader.Name: ExpressibleByStringLiteral {

@@ -88,12 +88,8 @@ extension STOMPHeaders: RangeReplaceableCollection, RandomAccessCollection, Muta
     /// - Parameter position: The position of the element to access.
     ///   `position` must be greater than or equal to ``STOMPHeaders/startIndex`` and less than ``STOMPHeaders/endIndex``.
     public subscript(position: Int) -> STOMPHeader {
-        get {
-            self.headers[position]
-        }
-        set {
-            self.headers[position] = newValue
-        }
+        get { self.headers[position] }
+        set { self.headers[position] = newValue }
     }
 
     /// Replace the specified subrange of headers with the given new elements.

@@ -1,11 +1,5 @@
 public import NIOCore
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
-
 /// A STOMP transaction.
 public struct STOMPTransaction: Sendable {
     @usableFromInline

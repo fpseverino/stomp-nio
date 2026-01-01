@@ -62,7 +62,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     private(set) var deadlineCallback: NIOScheduledCallback?
 
-    private var decoder: NIOSingleStepByteToMessageProcessor<STOMPFrameDecoder>
+    private let decoder: NIOSingleStepByteToMessageProcessor<STOMPFrameDecoder>
     private let logger: Logger
     @usableFromInline
     let configuration: Configuration

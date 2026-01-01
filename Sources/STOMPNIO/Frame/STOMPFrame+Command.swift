@@ -23,9 +23,9 @@ extension STOMPFrame {
         /// Create a STOMP command from a string.
         /// Returns `nil` if the string does not correspond to a valid command.
         ///
-        /// - Parameter command: The command string, case insensitive.
+        /// - Parameter command: The command string.
         public init?(_ command: String) {
-            self.init(rawValue: command.uppercased())
+            self.init(rawValue: command)
         }
 
         /// A textual representation of the command.
