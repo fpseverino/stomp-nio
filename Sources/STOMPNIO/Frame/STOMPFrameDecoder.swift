@@ -1,4 +1,3 @@
-import Algorithms
 import NIOCore
 
 struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
@@ -40,7 +39,7 @@ struct STOMPFrameDecoder: NIOSingleStepByteToMessageDecoder {
             headers.append(STOMPHeader(name: name, value: value))
 
             if contentLength == nil && name == .contentLength {
-                guard let contentLengthValue = Int(value.trimming(while: \.isWhitespace)), contentLengthValue >= 0 else {
+                guard let contentLengthValue = Int(value.trimmingWhitespace()), contentLengthValue >= 0 else {
                     throw ParseError.invalidContentLength(value)
                 }
                 contentLength = contentLengthValue
