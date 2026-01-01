@@ -179,7 +179,7 @@ struct STOMPConnectionTests {
     @Suite("Heart-beating Tests")
     struct HeartBeatingTests {
         @Test("Heart-beating with NIOAsyncTestingChannel")
-        func heartBeating() async throws {
+        func heartBeatingTestingChannel() async throws {
             let channel = NIOAsyncTestingChannel()
             let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
             let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
