@@ -59,22 +59,22 @@ public struct STOMPTransaction: Sendable {
     /// - Parameters:
     ///   - destination: The destination to subscribe to
     ///   - ackMode: The acknowledgment mode for the subscription
-    ///   - subscribeUserDefinedHeaders: Additional headers to include in the `SUBSCRIBE` frame
-    ///   - unsubscribeUserDefinedHeaders: Additional headers to include in the `UNSUBSCRIBE` frame
+    ///   - subscribeHeaders: Additional user defined headers to include in the `SUBSCRIBE` frame
+    ///   - unsubscribeHeaders: Additional user defined headers to include in the `UNSUBSCRIBE` frame
     ///   - process: Closure where messages received from the subscription are processed.
     ///     The closure receives a ``STOMPSubscription`` `AsyncSequence` to listen for messages.
     @inlinable
     public nonisolated func subscribe<Value>(
         to destination: String,
         ackMode: STOMPSubscription.AckMode = .auto,
-        subscribeUserDefinedHeaders: STOMPHeaders = [:],
-        unsubscribeUserDefinedHeaders: STOMPHeaders = [:],
+        subscribeHeaders: STOMPHeaders = [:],
+        unsubscribeHeaders: STOMPHeaders = [:],
         process: (STOMPSubscription) async throws -> Value
     ) async throws -> Value {
         let (id, stream) = try await self.connection.subscribe(
             destination: destination,
             ackMode: ackMode,
-            userDefinedHeaders: subscribeUserDefinedHeaders,
+            userDefinedHeaders: subscribeHeaders,
             transactionID: self.id
         )
         let value: Value
@@ -84,13 +84,13 @@ public struct STOMPTransaction: Sendable {
         } catch {
             // call unsubscribe in unstructured Task to avoid it being cancelled
             _ = await Task {
-                try await self.connection.unsubscribe(id: id, userDefinedHeaders: unsubscribeUserDefinedHeaders)
+                try await self.connection.unsubscribe(id: id, userDefinedHeaders: unsubscribeHeaders)
             }.result
             throw error
         }
         // call unsubscribe in unstructured Task to avoid it being cancelled
         _ = try await Task {
-            try await self.connection.unsubscribe(id: id, userDefinedHeaders: unsubscribeUserDefinedHeaders)
+            try await self.connection.unsubscribe(id: id, userDefinedHeaders: unsubscribeHeaders)
         }.value
         return value
     }
