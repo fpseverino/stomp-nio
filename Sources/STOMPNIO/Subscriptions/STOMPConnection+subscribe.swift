@@ -7,17 +7,23 @@ extension STOMPConnection {
     /// - Parameters:
     ///   - destination: The destination to subscribe to
     ///   - ackMode: The acknowledgment mode for the subscription
-    ///   - userDefinedHeaders: Additional headers to include in the `SUBSCRIBE` and `UNSUBSCRIBE` frames
+    ///   - subscribeHeaders: Additional user defined headers to include in the `SUBSCRIBE` frame
+    ///   - unsubscribeHeaders: Additional user defined headers to include in the `UNSUBSCRIBE` frame
     ///   - process: Closure where messages received from the subscription are processed.
     ///     The closure receives a ``STOMPSubscription`` `AsyncSequence` to listen for messages.
     @inlinable
     public nonisolated func subscribe<Value>(
         to destination: String,
         ackMode: STOMPSubscription.AckMode = .auto,
-        userDefinedHeaders: STOMPHeaders = [:],
+        subscribeHeaders: STOMPHeaders = [:],
+        unsubscribeHeaders: STOMPHeaders = [:],
         process: (STOMPSubscription) async throws -> Value
     ) async throws -> Value {
-        let (id, stream) = try await self.subscribe(destination: destination, ackMode: ackMode, userDefinedHeaders: userDefinedHeaders)
+        let (id, stream) = try await self.subscribe(
+            destination: destination,
+            ackMode: ackMode,
+            userDefinedHeaders: subscribeHeaders
+        )
         let value: Value
         do {
             value = try await process(stream)
@@ -25,13 +31,13 @@ extension STOMPConnection {
         } catch {
             // call unsubscribe in unstructured Task to avoid it being cancelled
             _ = await Task {
-                try await self.unsubscribe(id: id, userDefinedHeaders: userDefinedHeaders)
+                try await self.unsubscribe(id: id, userDefinedHeaders: unsubscribeHeaders)
             }.result
             throw error
         }
         // call unsubscribe in unstructured Task to avoid it being cancelled
         _ = try await Task {
-            try await self.unsubscribe(id: id, userDefinedHeaders: userDefinedHeaders)
+            try await self.unsubscribe(id: id, userDefinedHeaders: unsubscribeHeaders)
         }.value
         return value
     }
