@@ -9,8 +9,9 @@ extension STOMPConnectionConfiguration {
     /// - `stomp.virtualHost` (string, optional): The name of a virtual host that the client wishes to connect to.
     /// - `stomp.heartBeat.outgoing` (int, optional): The smallest number of milliseconds between heart-beats that the client can guarantee to send.
     /// - `stomp.heartBeat.incoming` (int, optional): The desired number of milliseconds between heart-beats that the client would like to receive.
-    /// - `stomp.connectTimeout` (int, optional, default: `10`): Maximum time to wait for the CONNECTED frame, in seconds.
-    /// - `stomp.receiptTimeout` (int, optional, default: `30`): Maximum time to wait for a RECEIPT frame, in seconds.
+    /// - `stomp.connectTimeout` (int, optional, default: `10`): Maximum time to wait for the `CONNECTED` frame, in seconds.
+    /// - `stomp.receiptTimeout` (int, optional, default: `30`): Maximum time to wait for a `RECEIPT` frame, in seconds.
+    /// - `stomp.connectHeaders` (string array, optional): Additional user defined headers to include in the `CONNECT` frame, in the `<key>:<value>` format.
     ///
     /// - Parameter config: The config reader to read configuration values from.
     public init(config: ConfigReader) {
@@ -38,5 +39,30 @@ extension STOMPConnectionConfiguration {
             } else {
                 (outgoing: .milliseconds(0), incoming: .milliseconds(0))
             }
+
+        let connectHeaders = stompConfig.stringArray(forKey: "connectHeaders", as: STOMPHeader.self)
+        self.connectHeaders =
+            if let connectHeaders {
+                STOMPHeaders(headers: connectHeaders)
+            } else {
+                [:]
+            }
+    }
+}
+
+extension STOMPHeader: ExpressibleByConfigString {
+    /// Creates a STOMP header from a configuration string.
+    ///
+    /// The configuration string must be in the `<key>:<value>` format.
+    ///
+    /// - Parameter configString: The configuration string to create the STOMP header from.
+    public init?(configString: String) {
+        guard let colonIndex = configString.firstIndex(of: ":") else {
+            return nil
+        }
+        let name = STOMPHeader.Name(String(configString[..<colonIndex]))
+        let valueStartIndex = configString.index(after: colonIndex)
+        let value = String(configString[valueStartIndex...])
+        self.init(name: name, value: value)
     }
 }

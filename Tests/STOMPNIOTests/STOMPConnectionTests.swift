@@ -227,6 +227,10 @@ struct STOMPConnectionTests {
                         "stomp.heartBeat.incoming": 1000,
                         "stomp.connectTimeout": 15,
                         "stomp.receiptTimeout": 45,
+                        "stomp.connectHeaders": ConfigValue(
+                            .stringArray(["header1:value1", "header2: value2"]),
+                            isSecret: false
+                        ),
                     ]
                 )
             )
@@ -251,6 +255,10 @@ struct STOMPConnectionTests {
                         "stomp.heartBeat.outgoing": 1000,
                         "stomp.connectTimeout": 15,
                         "stomp.receiptTimeout": 45,
+                        "stomp.connectHeaders": ConfigValue(
+                            .stringArray(["invalid-header", "header2: value2"]),
+                            isSecret: false
+                        ),
                     ]
                 )
             )

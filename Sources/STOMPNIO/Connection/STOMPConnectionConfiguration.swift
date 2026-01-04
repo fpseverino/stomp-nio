@@ -62,6 +62,9 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// Default value is 30 seconds.
     public var receiptTimeout: Duration
 
+    /// Additional user defined headers to include in the `CONNECT` frame.
+    public var connectHeaders: STOMPHeaders
+
     /// Creates a new STOMP connection configuration.
     ///
     /// Use this initializer to create a configuration object
@@ -71,19 +74,22 @@ public struct STOMPConnectionConfiguration: Sendable {
     ///   - authentication: Optional credentials for accessing the STOMP server. Set to `nil` for unauthenticated access.
     ///   - virtualHost: The name of a virtual host that the client wishes to connect to.
     ///   - heartBeat: The heart-beating configuration for the STOMP connection. Defaults to no heart-beating.
-    ///   - connectTimeout: Maximum time to wait for the CONNECTED frame. Defaults to 10 seconds.
-    ///   - receiptTimeout: Maximum time to wait for a RECEIPT frame. Defaults to 30 seconds.
+    ///   - connectTimeout: Maximum time to wait for the `CONNECTED` frame. Defaults to 10 seconds.
+    ///   - receiptTimeout: Maximum time to wait for a `RECEIPT` frame. Defaults to 30 seconds.
+    ///   - connectHeaders: Additional user defined headers to include in the `CONNECT` frame.
     public init(
         authentication: Authentication? = nil,
         virtualHost: String? = nil,
         heartBeat: (outgoing: Duration, incoming: Duration) = (outgoing: .milliseconds(0), incoming: .milliseconds(0)),
         connectTimeout: Duration = .seconds(10),
-        receiptTimeout: Duration = .seconds(30)
+        receiptTimeout: Duration = .seconds(30),
+        connectHeaders: STOMPHeaders = [:]
     ) {
         self.authentication = authentication
         self.virtualHost = virtualHost
         self.heartBeat = heartBeat
         self.connectTimeout = connectTimeout
         self.receiptTimeout = receiptTimeout
+        self.connectHeaders = connectHeaders
     }
 }
