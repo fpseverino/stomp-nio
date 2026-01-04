@@ -213,30 +213,62 @@ struct STOMPConnectionTests {
         }()
     }
 
-    @Test("Configuration from ConfigReader")
-    func configReader() async throws {
-        let config = ConfigReader(
-            provider: InMemoryProvider(
-                values: [
-                    "stomp.auth.login": "guest",
-                    "stomp.auth.passcode": "guest",
-                    "stomp.virtualHost": "/",
-                    "stomp.heartBeat.outgoing": 1000,
-                    "stomp.heartBeat.incoming": 1000,
-                    "stomp.connectTimeout": 15,
-                    "stomp.receiptTimeout": 45,
-                ]
+    @Suite("ConfigReader Tests")
+    struct ConfigReaderTests {
+        @Test("Configuration from ConfigReader")
+        func configReader() async throws {
+            let config = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "stomp.auth.login": "guest",
+                        "stomp.auth.passcode": "guest",
+                        "stomp.virtualHost": "/",
+                        "stomp.heartBeat.outgoing": 1000,
+                        "stomp.heartBeat.incoming": 1000,
+                        "stomp.connectTimeout": 15,
+                        "stomp.receiptTimeout": 45,
+                    ]
+                )
             )
-        )
 
-        try await STOMPConnection.withConnection(
-            address: .hostname(Self.hostname),
-            configuration: .init(config: config),
-            logger: self.logger
-        ) { connection in
-            try await Task.sleep(for: .seconds(5))
-            try await connection.send("Test", to: "/queue/config-reader")
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname),
+                configuration: .init(config: config),
+                logger: self.logger
+            ) { connection in
+                try await Task.sleep(for: .seconds(5))
+                try await connection.send("Test", to: "/queue/config-reader")
+            }
         }
+
+        @Test("Missing Configuration Values")
+        func missingConfigValues() async throws {
+            let config = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "stomp.auth.login": "guest",
+                        "stomp.virtualHost": "/",
+                        "stomp.heartBeat.outgoing": 1000,
+                        "stomp.connectTimeout": 15,
+                        "stomp.receiptTimeout": 45,
+                    ]
+                )
+            )
+
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname),
+                configuration: .init(config: config),
+                logger: self.logger
+            ) { connection in
+                try await connection.send("Test", to: "/queue/config-reader")
+            }
+        }
+
+        let logger: Logger = {
+            var logger = Logger(label: "ConfigReaderTests")
+            logger.logLevel = .trace
+            return logger
+        }()
     }
 
     @Suite("Cancellation Tests")

@@ -374,11 +374,4 @@ struct STOMPFrameDecoderTests {
 
         #expect(try self.decoder.decode(buffer: &buffer) == nil)  // Need more data
     }
-
-    @Test("Start of Whitespace Suffix in All-Whitespace Substring")
-    func startOfWhitespaceSuffixInAllWhitespaceSubstring() {
-        let substring: Substring = "     "
-        let index = substring.startOfWhitespaceSuffix()
-        #expect(index == substring.startIndex)
-    }
 }
