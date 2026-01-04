@@ -11,13 +11,18 @@ import Foundation
 final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     struct Configuration {
+        @usableFromInline
         let authentication: STOMPConnectionConfiguration.Authentication?
+        @usableFromInline
         let virtualHost: String?
+        @usableFromInline
         let heartBeat: (outgoing: TimeAmount, incoming: TimeAmount)
         @usableFromInline
         let connectTimeout: TimeAmount
         @usableFromInline
         let receiptTimeout: TimeAmount
+        @usableFromInline
+        let connectHeaders: STOMPHeaders
     }
 
     struct STOMPDeadlineSchedule: NIOScheduledCallbackHandler {
@@ -88,10 +93,11 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func setInitialized(context: ChannelHandlerContext) {
         let outgoingHeartBeat = self.configuration.heartBeat.outgoing.nanoseconds / 1_000_000
         let incomingHeartBeat = self.configuration.heartBeat.incoming.nanoseconds / 1_000_000
-        var headers: STOMPHeaders = [
-            .acceptVersion: "1.0,1.1,1.2",
-            .heartBeat: "\(outgoingHeartBeat),\(incomingHeartBeat)",
-        ]
+        var headers: STOMPHeaders =
+            self.configuration.connectHeaders + [
+                .acceptVersion: "1.0,1.1,1.2",
+                .heartBeat: "\(outgoingHeartBeat),\(incomingHeartBeat)",
+            ]
         if let authentication = self.configuration.authentication {
             headers.append(.init(name: .login, value: authentication.login))
             headers.append(.init(name: .passcode, value: authentication.passcode))
@@ -476,7 +482,8 @@ extension STOMPChannelHandler.Configuration {
                 incoming: .init(other.heartBeat.incoming)
             ),
             connectTimeout: .init(other.connectTimeout),
-            receiptTimeout: .init(other.receiptTimeout)
+            receiptTimeout: .init(other.receiptTimeout),
+            connectHeaders: other.connectHeaders
         )
     }
 }
