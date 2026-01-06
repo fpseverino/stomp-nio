@@ -30,21 +30,12 @@ final class STOMPWebSocketChannelHandler: ChannelDuplexHandler {
         let frame = self.unwrapInboundIn(data)
 
         switch frame.opcode {
-        case .text:
+        case .text, .binary:
             if var frameSeq = self.webSocketFrameSequence {
                 frameSeq.append(frame)
                 self.webSocketFrameSequence = frameSeq
             } else {
-                var frameSeq = WebSocketFrameSequence(type: .text)
-                frameSeq.append(frame)
-                self.webSocketFrameSequence = frameSeq
-            }
-        case .binary:
-            if var frameSeq = self.webSocketFrameSequence {
-                frameSeq.append(frame)
-                self.webSocketFrameSequence = frameSeq
-            } else {
-                var frameSeq = WebSocketFrameSequence(type: .binary)
+                var frameSeq = WebSocketFrameSequence(type: frame.opcode)
                 frameSeq.append(frame)
                 self.webSocketFrameSequence = frameSeq
             }
@@ -92,7 +83,7 @@ final class STOMPWebSocketChannelHandler: ChannelDuplexHandler {
 
     /// Make mask key to be used in WebSocket frame
     func makeMaskKey() -> WebSocketMaskingKey? {
-        let bytes: [UInt8] = (0...3).map { _ in UInt8.random(in: 1...255) }
+        let bytes: [UInt8] = (0...3).map { _ in UInt8.random(in: .min ... .max) }
         return WebSocketMaskingKey(bytes)
     }
 

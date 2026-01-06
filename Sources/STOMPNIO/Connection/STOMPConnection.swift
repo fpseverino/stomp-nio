@@ -414,10 +414,10 @@ public final actor STOMPConnection: Sendable {
         if let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoopGroup) {
             // Create `NIOClientTCPBootstrap` with NIOTS TLS provider
             let options: NWProtocolTLS.Options
-            if case .enable(let config, _) = configuration.tls.base {
-                switch config {
-                case .ts(let config):
-                    options = try config.getNWProtocolTLSOptions(logger: logger)
+            if case .enable(let tlsConfigType, _) = configuration.tls.base {
+                switch tlsConfigType {
+                case .ts(let tsConfig):
+                    options = try tsConfig.getNWProtocolTLSOptions(logger: logger)
                 #if os(macOS) || os(Linux)
                 case .niossl:
                     throw STOMPClientError.wrongTLSConfig
@@ -438,9 +438,9 @@ public final actor STOMPConnection: Sendable {
 
         #if os(macOS) || os(Linux)
         if let clientBootstrap = ClientBootstrap(validatingGroup: eventLoopGroup) {
-            if case .enable(let configuration, _) = configuration.tls.base {
+            if case .enable(let tlsConfig, _) = configuration.tls.base {
                 let tlsConfiguration: TLSConfiguration
-                switch configuration {
+                switch tlsConfig {
                 case .niossl(let config):
                     tlsConfiguration = config
                 default:

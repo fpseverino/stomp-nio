@@ -127,7 +127,7 @@ public struct TSTLSConfiguration: Sendable {
         }
     }
 
-    /// The minimum TLS version to allow in negotiation. Defaults to tlsv1.
+    /// The minimum TLS version to allow in negotiation. Defaults to tlsv12.
     public var minimumTLSVersion: TSTLSVersion
 
     /// The maximum TLS version to allow in negotiation. If nil, there is no upper limit. Defaults to nil.

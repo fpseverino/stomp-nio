@@ -59,7 +59,7 @@ extension STOMPConnectionConfiguration {
             if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {
                 .init(
                     urlPath: urlPath ?? "/ws",
-                    maxFrameSize: maxFrameSize ?? 1 << 24,
+                    maxFrameSize: maxFrameSize ?? 1 << 14,
                     initialRequestHeaders: initialRequestHeaders ?? [:]
                 )
             } else {

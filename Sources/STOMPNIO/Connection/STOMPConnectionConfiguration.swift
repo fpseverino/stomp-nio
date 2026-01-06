@@ -35,7 +35,7 @@ public struct STOMPConnectionConfiguration: Sendable {
 
         /// Disables TLS for the connection.
         ///
-        /// Use this option when connecting to a Valkey server that doesn't require encryption.
+        /// Use this option when connecting to a STOMP broker that doesn't require encryption.
         public static var disable: Self { .init(base: .disable) }
 
         /// Enables TLS for the connection.
