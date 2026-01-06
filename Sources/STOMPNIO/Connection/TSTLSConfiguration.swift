@@ -217,6 +217,7 @@ extension TSTLSConfiguration {
 
         if self.certificateVerification != .fullVerification || self.trustRoots != nil {
             // add verify block to control certificate verification
+            // swift-format-ignore: AlwaysUseLowerCamelCase
             sec_protocol_options_set_verify_block(
                 options.securityProtocolOptions,
                 { _, sec_trust, sec_protocol_verify_complete in
