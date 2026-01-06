@@ -1,4 +1,5 @@
 public import Configuration
+import NIOHTTP1
 
 extension STOMPConnectionConfiguration {
     /// Creates a new STOMP connection configuration using values from the provided reader.
@@ -47,6 +48,26 @@ extension STOMPConnectionConfiguration {
             } else {
                 [:]
             }
+
+        let stompWebSocketConfig = stompConfig.scoped(to: "webSocket")
+        let urlPath = stompWebSocketConfig.string(forKey: "urlPath")
+        let maxFrameSize = stompWebSocketConfig.int(forKey: "maxFrameSize")
+        let initialRequestHeaders = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders").flatMap {
+            HTTPHeaders(configStringArray: $0)
+        }
+        self.webSocket =
+            if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {
+                .init(
+                    urlPath: urlPath ?? "/ws",
+                    maxFrameSize: maxFrameSize ?? 1 << 24,
+                    initialRequestHeaders: initialRequestHeaders ?? [:]
+                )
+            } else {
+                nil
+            }
+
+        // TLS is disabled by default
+        self.tls = .disable
     }
 }
 
@@ -64,5 +85,26 @@ extension STOMPHeader: ExpressibleByConfigString {
         let valueStartIndex = configString.index(after: colonIndex)
         let value = String(configString[valueStartIndex...])
         self.init(name: name, value: value)
+    }
+}
+
+extension HTTPHeaders {
+    /// Creates HTTP headers from an array of configuration strings.
+    ///
+    /// Each configuration string must be in the `<key>:<value>` format.
+    ///
+    /// - Parameter configStringArray: The array of configuration strings to create the HTTP headers from.
+    fileprivate init?(configStringArray: [String]) {
+        var headers = HTTPHeaders()
+        for configString in configStringArray {
+            guard let colonIndex = configString.firstIndex(of: ":") else {
+                return nil
+            }
+            let name = String(configString[..<colonIndex].trimmingWhitespace())
+            let valueStartIndex = configString.index(after: colonIndex)
+            let value = String(configString[valueStartIndex...].trimmingWhitespace())
+            headers.add(name: name, value: value)
+        }
+        self = headers
     }
 }

@@ -1,9 +1,9 @@
-extension String {
-    func trimmingWhitespace() -> Substring {
+extension StringProtocol {
+    func trimmingWhitespace() -> Self.SubSequence {
         self.trimmingWhitespacePrefix().trimmingWhitespaceSuffix()
     }
 
-    func endOfWhitespacePrefix() -> String.Index {
+    func endOfWhitespacePrefix() -> Self.Index {
         var index = self.startIndex
         while index < self.endIndex, self[index].isWhitespace {
             formIndex(after: &index)
@@ -11,14 +11,12 @@ extension String {
         return index
     }
 
-    func trimmingWhitespacePrefix() -> Substring {
+    func trimmingWhitespacePrefix() -> Self.SubSequence {
         let start = self.endOfWhitespacePrefix()
         return self[start..<self.endIndex]
     }
-}
 
-extension Substring {
-    func startOfWhitespaceSuffix() -> Substring.Index {
+    func startOfWhitespaceSuffix() -> Self.Index {
         var index = self.endIndex
         while index > self.startIndex {
             let after = index
@@ -30,7 +28,7 @@ extension Substring {
         return index
     }
 
-    func trimmingWhitespaceSuffix() -> Substring {
+    func trimmingWhitespaceSuffix() -> Self.SubSequence {
         let end = self.startOfWhitespaceSuffix()
         return self[self.startIndex..<end]
     }

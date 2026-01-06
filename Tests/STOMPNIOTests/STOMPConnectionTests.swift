@@ -20,11 +20,15 @@ import NIOTransportServices
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
-    @Test("Pub/Sub", arguments: STOMPSubscription.AckMode.allCases)
-    func pubSub(ackMode: STOMPSubscription.AckMode) async throws {
+    @Test("Pub/Sub", arguments: STOMPSubscription.AckMode.allCases, [STOMPConnectionConfiguration.WebSocket(), nil])
+    func pubSub(ackMode: STOMPSubscription.AckMode, webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
         try await withThrowingTaskGroup { group in
             group.addTask {
-                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
+                try await STOMPConnection.withConnection(
+                    address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
+                    configuration: .init(webSocket: webSocket),
+                    logger: self.subscriberLogger
+                ) { connection in
                     try await connection.subscribe(to: "/queue/stomp-nio", ackMode: ackMode) { subscription in
                         for try await frame in subscription {
                             #expect(String(buffer: frame.body) == "Hello, STOMP over NIO!")
@@ -35,7 +39,11 @@ struct STOMPConnectionTests {
             }
 
             group.addTask {
-                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.publisherLogger) { connection in
+                try await STOMPConnection.withConnection(
+                    address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
+                    configuration: .init(webSocket: webSocket),
+                    logger: self.publisherLogger
+                ) { connection in
                     try await connection.send("Hello, STOMP over NIO!", to: "/queue/stomp-nio")
                 }
             }
@@ -44,15 +52,21 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Publish Large Payload", arguments: STOMPSubscription.AckMode.allCases)
-    func publishLargePayload(ackMode: STOMPSubscription.AckMode) async throws {
-        let payloadSize = 65537
-        let payloadData = Data(count: payloadSize)
+    @Test(
+        "Publish Large Payload",
+        arguments: STOMPSubscription.AckMode.allCases, [STOMPConnectionConfiguration.WebSocket(maxFrameSize: 70000), nil]
+    )
+    func publishLargePayload(ackMode: STOMPSubscription.AckMode, webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+        let payloadData = Data(count: 65537)
         let payload = ByteBufferAllocator().buffer(data: payloadData)
 
         try await withThrowingTaskGroup { group in
             group.addTask {
-                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.subscriberLogger) { connection in
+                try await STOMPConnection.withConnection(
+                    address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
+                    configuration: .init(webSocket: webSocket),
+                    logger: self.subscriberLogger
+                ) { connection in
                     try await connection.subscribe(to: "/queue/large-payload", ackMode: ackMode) { subscription in
                         for try await frame in subscription {
                             var buffer = frame.body
@@ -65,7 +79,11 @@ struct STOMPConnectionTests {
             }
 
             group.addTask {
-                try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.publisherLogger) { connection in
+                try await STOMPConnection.withConnection(
+                    address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
+                    configuration: .init(webSocket: webSocket),
+                    logger: self.publisherLogger
+                ) { connection in
                     try await connection.send(payload, to: "/queue/large-payload", contentType: "application/octet-stream")
                 }
             }
@@ -98,6 +116,29 @@ struct STOMPConnectionTests {
                 configuration: .init(
                     authentication: .init(login: "wrong-user", passcode: "wrong-pass")
                 ),
+                logger: self.logger
+            ) { _ in }
+        }
+    }
+
+    @Test("Connect with WebSocket")
+    func webSocketConnect() async throws {
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname, port: 15674),
+            configuration: .init(webSocket: .init()),
+            logger: self.logger
+        ) { connection in
+            try await connection.send("Test", to: "/queue/websocket")
+        }
+    }
+
+    // TODO: Check if this is a RabbitMQ bug or a STOMPNIO bug
+    @Test("Connect with WebSocket with TCP Port", .disabled())
+    func webSocketTCPPort() async throws {
+        await #expect(throws: (any Error).self) {
+            try await STOMPConnection.withConnection(
+                address: .hostname(Self.hostname, port: 61613),
+                configuration: .init(webSocket: .init()),
                 logger: self.logger
             ) { _ in }
         }
@@ -194,11 +235,11 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Heart-beating with Real Broker")
-        func heartBeatingBroker() async throws {
+        @Test("Heart-beating with Real Broker", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func heartBeatingBroker(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
-                address: .hostname(STOMPConnectionTests.hostname),
-                configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1))),
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)), webSocket: webSocket),
                 logger: self.logger
             ) { connection in
                 try await Task.sleep(for: .seconds(5))
@@ -231,12 +272,16 @@ struct STOMPConnectionTests {
                             .stringArray(["header1:value1", "header2: value2"]),
                             isSecret: false
                         ),
+                        "stomp.webSocket.initialRequestHeaders": ConfigValue(
+                            .stringArray(["X-Custom-Header: CustomValue", "X-Another-Header: AnotherValue"]),
+                            isSecret: false
+                        ),
                     ]
                 )
             )
 
             try await STOMPConnection.withConnection(
-                address: .hostname(STOMPConnectionTests.hostname),
+                address: .hostname(STOMPConnectionTests.hostname, port: 15674),
                 configuration: .init(config: config),
                 logger: self.logger
             ) { connection in
@@ -281,9 +326,13 @@ struct STOMPConnectionTests {
 
     @Suite("Cancellation Tests")
     struct CancellationTests {
-        @Test("Cancellation")
-        func cancellation() async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+        @Test("Cancellation", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func cancellation(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 await withThrowingTaskGroup { group in
                     group.addTask {
                         await #expect(throws: STOMPClientError.cancelledTask) {
@@ -299,9 +348,13 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Already Cancelled")
-        func alreadyCancelled() async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+        @Test("Already Cancelled", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func alreadyCancelled(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 await withThrowingTaskGroup(of: Void.self) { group in
                     group.cancelAll()
                     group.addTask {
@@ -352,9 +405,13 @@ struct STOMPConnectionTests {
 
     @Suite("Transactions Tests")
     struct TransactionsTests {
-        @Test("Subscription Transaction", arguments: STOMPSubscription.AckMode.allCases)
-        func subscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+        @Test("Subscription Transaction", arguments: STOMPSubscription.AckMode.allCases, [STOMPConnectionConfiguration.WebSocket(), nil])
+        func subscriptionTransaction(ackMode: STOMPSubscription.AckMode, webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 try await connection.withTransaction { transaction in
                     try await withThrowingTaskGroup { group in
                         group.addTask {
@@ -375,7 +432,11 @@ struct STOMPConnectionTests {
                 }
             }
 
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
                         try await connection.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
@@ -392,9 +453,13 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Send Transaction")
-        func sendTransaction() async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+        @Test("Send Transaction", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func sendTransaction(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
                         try await connection.withTransaction { transaction in
@@ -454,9 +519,13 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Abort Send Transaction")
-        func abortSendTransaction() async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+        @Test("Abort Send Transaction", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func abortSendTransaction(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
                         try await connection.withTransaction { transaction in

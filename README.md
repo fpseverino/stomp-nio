@@ -14,12 +14,12 @@ It defines a text based wire-format for messages passed between these clients an
 STOMP has been in active use for several years and is supported by many message brokers and client libraries.
 
 STOMPNIO is a Swift NIO based implementation of a STOMP client. It supports:
-- [x] STOMP versions 1.0, 1.1, and 1.2
-- [ ] Unencrypted and encrypted (via TLS) connections
-- [ ] WebSocket connections
-- [x] POSIX sockets
-- [x] Apple's Network framework via [NIOTransportServices](https://github.com/apple/swift-nio-transport-services) (required for iOS)
-- [x] Unix domain sockets
+- STOMP versions 1.0, 1.1, and 1.2
+- Unencrypted and encrypted (via TLS) connections
+- WebSocket connections
+- POSIX sockets
+- Apple's Network framework via [NIOTransportServices](https://github.com/apple/swift-nio-transport-services) (required for iOS)
+- Unix domain sockets
 
 ## Overview
 

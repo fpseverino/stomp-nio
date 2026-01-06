@@ -33,7 +33,7 @@ jobs:
     - name: Install and run RabbitMQ
       run: |
         brew install rabbitmq
-        rabbitmq-plugins enable rabbitmq_stomp
+        rabbitmq-plugins enable rabbitmq_stomp rabbitmq_web_stomp
         brew services start rabbitmq
     - name: Run unit tests
       run: swift test --enable-code-coverage

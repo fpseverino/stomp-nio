@@ -1,5 +1,54 @@
+public import NIOHTTP1
+
+#if os(macOS) || os(Linux)
+public import NIOSSL
+#endif
+
 /// A configuration object that defines how to connect to a STOMP server.
 public struct STOMPConnectionConfiguration: Sendable {
+    /// Configuration for TLS (Transport Layer Security) encryption.
+    ///
+    /// This structure allows you to enable or disable encrypted connections to the STOMP broker.
+    /// When enabled, it requires a ``STOMPConnectionConfiguration/TLS/Configuration``
+    /// and optionally a server name for SNI (Server Name Indication).
+    public struct TLS: Sendable {
+        /// Enum for different TLS Configuration types.
+        ///
+        /// The TLS Configuration type to use is defined by the `EventLoopGroup` the client is using.
+        /// If you don't provide an `EventLoopGroup` then the `EventLoopGroup` created will be defined by this variable.
+        /// It is recommended on iOS that you use NIO Transport Services.
+        public enum Configuration: Sendable {
+            /// NIOSSL TLS configuration.
+            #if os(macOS) || os(Linux)
+            case niossl(TLSConfiguration)
+            #endif
+            #if canImport(Network)
+            /// NIO Transport Services TLS configuration.
+            case ts(TSTLSConfiguration)
+            #endif
+        }
+        enum Base {
+            case disable
+            case enable(Configuration, String?)
+        }
+        let base: Base
+
+        /// Disables TLS for the connection.
+        ///
+        /// Use this option when connecting to a Valkey server that doesn't require encryption.
+        public static var disable: Self { .init(base: .disable) }
+
+        /// Enables TLS for the connection.
+        ///
+        /// - Parameters:
+        ///   - configuration: The TLS configuration used to establish the secure connection
+        ///   - tlsServerName: Optional server name for SNI (Server Name Indication)
+        /// - Returns: A configured TLS instance
+        public static func enable(_ configuration: Configuration, tlsServerName: String?) throws -> Self {
+            .init(base: .enable(configuration, tlsServerName))
+        }
+    }
+
     /// Authentication credentials for accessing a STOMP server.
     ///
     /// Use this structure to provide user ID and password credentials
@@ -21,10 +70,41 @@ public struct STOMPConnectionConfiguration: Sendable {
         }
     }
 
+    /// WebSocket configuration for the STOMP connection.
+    public struct WebSocket: Sendable {
+        /// WebSocket URL.
+        public var urlPath: String
+        /// The maximum frame size the WebSocket client will allow.
+        public var maxFrameSize: Int
+        /// Additional headers to add to the initial HTTP request.
+        public var initialRequestHeaders: HTTPHeaders
+
+        /// Creates a new WebSocket configuration.
+        ///
+        /// - Parameters:
+        ///   - urlPath: WebSocket URL, defaults to "/ws".
+        ///   - maxFrameSize: The maximum frame size the WebSocket client will allow.
+        ///   - initialRequestHeaders: Additional headers to add to the initial HTTP request.
+        public init(
+            urlPath: String = "/ws",
+            maxFrameSize: Int = 1 << 14,
+            initialRequestHeaders: HTTPHeaders = [:]
+        ) {
+            self.urlPath = urlPath
+            self.maxFrameSize = maxFrameSize
+            self.initialRequestHeaders = initialRequestHeaders
+        }
+    }
+
     /// Optional authentication credentials for accessing the STOMP server.
     ///
     /// Set this property when connecting to a server that requires authentication.
     public var authentication: Authentication?
+
+    /// TLS configuration for the connection.
+    ///
+    /// Use `.disable` for unencrypted connections or `.enable(...)` for secure connections.
+    public var tls: TLS
 
     /// The name of a virtual host that the client wishes to connect to.
     ///
@@ -65,6 +145,9 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// Additional user defined headers to include in the `CONNECT` frame.
     public var connectHeaders: STOMPHeaders
 
+    /// WebSocket configuration for the STOMP connection.
+    public var webSocket: WebSocket?
+
     /// Creates a new STOMP connection configuration.
     ///
     /// Use this initializer to create a configuration object
@@ -76,20 +159,26 @@ public struct STOMPConnectionConfiguration: Sendable {
     ///   - heartBeat: The heart-beating configuration for the STOMP connection. Defaults to no heart-beating.
     ///   - connectTimeout: Maximum time to wait for the `CONNECTED` frame. Defaults to 10 seconds.
     ///   - receiptTimeout: Maximum time to wait for a `RECEIPT` frame. Defaults to 30 seconds.
+    ///   - tls: TLS configuration for secure connections. Defaults to `.disable` for unencrypted connections.
     ///   - connectHeaders: Additional user defined headers to include in the `CONNECT` frame.
+    ///   - webSocket: WebSocket configuration for the STOMP connection. Defaults to `nil` for non-WebSocket connections.
     public init(
         authentication: Authentication? = nil,
         virtualHost: String? = nil,
         heartBeat: (outgoing: Duration, incoming: Duration) = (outgoing: .milliseconds(0), incoming: .milliseconds(0)),
         connectTimeout: Duration = .seconds(10),
         receiptTimeout: Duration = .seconds(30),
-        connectHeaders: STOMPHeaders = [:]
+        tls: TLS = .disable,
+        connectHeaders: STOMPHeaders = [:],
+        webSocket: WebSocket? = nil
     ) {
         self.authentication = authentication
         self.virtualHost = virtualHost
         self.heartBeat = heartBeat
         self.connectTimeout = connectTimeout
         self.receiptTimeout = receiptTimeout
+        self.tls = tls
         self.connectHeaders = connectHeaders
+        self.webSocket = webSocket
     }
 }

@@ -1,3 +1,6 @@
+import NIOCore
+import NIOEmbedded
+import NIOHTTP1
 import Testing
 
 @testable import STOMPNIO
@@ -62,11 +65,52 @@ struct STOMPNIOTests {
         }
     }
 
-    @Test("Start of Whitespace Suffix in All-Whitespace Substring")
-    func startOfWhitespaceSuffixInAllWhitespaceSubstring() {
-        let substring: Substring = "     "
-        let index = substring.startOfWhitespaceSuffix()
-        #expect(index == substring.startIndex)
+    @Test("Start of Whitespace Suffix in All-Whitespace String")
+    func startOfWhitespaceSuffixInAllWhitespaceString() {
+        let string = "     "
+        let index = string.startOfWhitespaceSuffix()
+        #expect(index == string.startIndex)
+    }
+
+    @Test("WebSocket Initial Request")
+    func webSocketInitialRequest() throws {
+        let el = EmbeddedEventLoop()
+        defer { #expect(throws: Never.self) { try el.syncShutdownGracefully() } }
+        let promise = el.makePromise(of: Void.self)
+        let initialRequestHandler = STOMPWebSocketInitialRequestChannelHandler(
+            host: "example.com",
+            urlPath: "/stomp",
+            additionalHeaders: ["Test": "Value"],
+            upgradePromise: promise
+        )
+        let channel = EmbeddedChannel(handler: initialRequestHandler, loop: el)
+        try channel.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 0)).wait()
+        let requestHead = try channel.readOutbound(as: HTTPClientRequestPart.self)
+        let requestBody = try channel.readOutbound(as: HTTPClientRequestPart.self)
+        let requestEnd = try channel.readOutbound(as: HTTPClientRequestPart.self)
+        switch requestHead {
+        case .head(let head):
+            #expect(head.uri == "/stomp")
+            #expect(head.headers["host"].first == "example.com")
+            #expect(head.headers["Sec-WebSocket-Protocol"].first == "v12.stomp, v11.stomp, v10.stomp")
+            #expect(head.headers["Test"].first == "Value")
+        default:
+            Issue.record("Unexpected request head: \(String(describing: requestHead))")
+        }
+        switch requestBody {
+        case .body(let data):
+            #expect(data == .byteBuffer(ByteBuffer()))
+        default:
+            Issue.record("Unexpected request body: \(String(describing: requestBody))")
+        }
+        switch requestEnd {
+        case .end(nil):
+            break
+        default:
+            Issue.record("Unexpected request end: \(String(describing: requestEnd))")
+        }
+        _ = try channel.finish()
+        promise.succeed(())
     }
 }
 
