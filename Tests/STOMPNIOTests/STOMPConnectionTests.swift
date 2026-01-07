@@ -16,6 +16,10 @@ import Foundation
 import NIOTransportServices
 #endif
 
+#if os(macOS) || os(Linux) || os(Android)
+import NIOSSL
+#endif
+
 @Suite("STOMPConnection Tests", .serialized)
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
@@ -143,6 +147,57 @@ struct STOMPConnectionTests {
             ) { _ in }
         }
     }
+
+    @Test("Connect with TLS", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+    func tlsConnect(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname, port: webSocket == nil ? 61614 : 15673),
+            configuration: .init(
+                tls: .enable(Self.getTLSConfiguration(), tlsServerName: "fpseverino.com"),
+                webSocket: webSocket
+            ),
+            eventLoop: Self.eventLoopGroupSingleton.any(),
+            logger: self.logger
+        ) { connection in
+            try await connection.send("Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!", to: "/queue/tls")
+        }
+
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+            try await connection.subscribe(to: "/queue/tls") { subscription in
+                for try await frame in subscription {
+                    #expect(String(buffer: frame.body) == "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!")
+                    return
+                }
+            }
+        }
+    }
+
+    #if canImport(Network)
+    @Test("Connect with TLS from P12")
+    func tlsConnectFromP12() async throws {
+        try await STOMPConnection.withConnection(
+            address: .hostname(Self.hostname, port: 61614),
+            configuration: .init(
+                tls: .enable(
+                    .ts(
+                        .init(
+                            trustRoots: .der(Self.rootPath + "/RabbitMQ/certs/ca.der"),
+                            clientIdentity: .p12(
+                                filename: Self.rootPath + "/RabbitMQ/certs/client.p12",
+                                password: "STOMPNIOClientCertPassword"
+                            )
+                        )
+                    ),
+                    tlsServerName: "fpseverino.com"
+                )
+            ),
+            eventLoop: Self.eventLoopGroupSingleton.any(),
+            logger: self.logger
+        ) { connection in
+            try await connection.send("Test", to: "/queue/tls-p12")
+        }
+    }
+    #endif
 
     @Test("Send Frame")
     func sendFrame() async throws {
@@ -575,4 +630,75 @@ struct STOMPConnectionTests {
         logger.logLevel = .trace
         return logger
     }()
+
+    static let rootPath = #filePath
+        .split(separator: "/", omittingEmptySubsequences: false)
+        .dropLast(3)
+        .joined(separator: "/")
+
+    static var eventLoopGroupSingleton: any EventLoopGroup {
+        #if canImport(Network)
+        // Return TS Eventloop for non-Linux builds, as we use TS TLS
+        NIOTSEventLoopGroup.singleton
+        #else
+        MultiThreadedEventLoopGroup.singleton
+        #endif
+    }
+
+    static var _tlsConfiguration: STOMPConnectionConfiguration.TLS.Configuration {
+        get throws {
+            #if os(Linux) || os(Android)
+            let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/RabbitMQ/certs/ca.pem")
+            let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/RabbitMQ/certs/client.pem")
+            let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/RabbitMQ/certs/client.key", format: .pem)
+            var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+            tlsConfiguration.trustRoots = .certificates(rootCertificate)
+            tlsConfiguration.certificateChain = certificate.map { .certificate($0) }
+            tlsConfiguration.privateKey = .privateKey(privateKey)
+            return .niossl(tlsConfiguration)
+            #else
+            let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/RabbitMQ/certs/ca.der"))
+            let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
+            let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/RabbitMQ/certs/client.p12"))
+            let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
+            var rawItems: CFArray?
+            guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
+                throw STOMPClientError.wrongTLSConfig
+            }
+            let items = rawItems! as! [[String: Any]]
+            let firstItem = items[0]
+            let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
+            let tlsConfiguration = TSTLSConfiguration(
+                trustRoots: trustRootCertificates,
+                clientIdentity: identity
+            )
+            return .ts(tlsConfiguration)
+            #endif
+        }
+    }
+
+    static func getTLSConfiguration(
+        withTrustRoots: Bool = true,
+        withClientKey: Bool = true
+    ) throws -> STOMPConnectionConfiguration.TLS.Configuration {
+        switch try Self._tlsConfiguration {
+        #if os(macOS) || os(Linux) || os(Android)
+        case .niossl(let config):
+            var tlsConfig = TLSConfiguration.makeClientConfiguration()
+            tlsConfig.trustRoots = withTrustRoots ? (config.trustRoots ?? .default) : .default
+            tlsConfig.certificateChain = withClientKey ? config.certificateChain : []
+            tlsConfig.privateKey = withClientKey ? config.privateKey : nil
+            return .niossl(tlsConfig)
+        #endif
+        #if canImport(Network)
+        case .ts(let config):
+            return .ts(
+                TSTLSConfiguration(
+                    trustRoots: withTrustRoots ? config.trustRoots : nil,
+                    clientIdentity: withClientKey ? config.clientIdentity : nil
+                )
+            )
+        #endif
+        }
+    }
 }

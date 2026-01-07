@@ -5,7 +5,7 @@ public import NIOPosix
 import NIOWebSocket
 import Synchronization
 
-#if os(macOS) || os(Linux)
+#if os(macOS) || os(Linux) || os(Android)
 import NIOSSL
 #endif
 
@@ -418,7 +418,7 @@ public final actor STOMPConnection: Sendable {
                 switch tlsConfigType {
                 case .ts(let tsConfig):
                     options = try tsConfig.getNWProtocolTLSOptions(logger: logger)
-                #if os(macOS) || os(Linux)
+                #if os(macOS) || os(Linux) || os(Android)
                 case .niossl:
                     throw STOMPClientError.wrongTLSConfig
                 #endif
@@ -436,7 +436,7 @@ public final actor STOMPConnection: Sendable {
         }
         #endif
 
-        #if os(macOS) || os(Linux)
+        #if os(macOS) || os(Linux) || os(Android)
         if let clientBootstrap = ClientBootstrap(validatingGroup: eventLoopGroup) {
             if case .enable(let tlsConfig, _) = configuration.tls.base {
                 let tlsConfiguration: TLSConfiguration

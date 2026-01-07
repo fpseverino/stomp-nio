@@ -22,7 +22,7 @@ import Foundation
 
 import Logging
 import Network
-#if os(macOS) || os(Linux)
+#if os(macOS) || os(Linux) || os(Android)
 import NIOSSL
 #endif
 
@@ -78,7 +78,7 @@ public struct TSTLSConfiguration: Sendable {
         /// Create certificate array from already loaded SecCertificate array
         public static func certificates(_ secCertificates: [SecCertificate]) -> Self { .init(certificates: secCertificates) }
 
-        #if os(macOS) || os(Linux)
+        #if os(macOS) || os(Linux) || os(Android)
         /// Create certificate array from PEM file
         public static func pem(_ filename: String) throws -> Self {
             let certificates = try NIOSSLCertificate.fromPEMFile(filename)
