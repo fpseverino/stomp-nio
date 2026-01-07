@@ -73,7 +73,8 @@ jobs:
           - 61613:61613
         volumes:
           - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
-          - ${{ github.workspace }}/Certs:/Certs
+          - ${{ github.workspace }}/Certs:/var/lib/rabbitmq/Certs
+        working_dir: /var/lib/rabbitmq
     steps:
     - name: Install curl
       run: apt-get update -yq && apt-get install -y curl
@@ -83,8 +84,6 @@ jobs:
       uses: docker://docker
       with:
         args: docker restart rabbitmq
-    - name: Print working directory
-      run: pwd
     - name: Run unit tests
       env:
         RABBITMQ_SERVER: rabbitmq
