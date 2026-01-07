@@ -83,6 +83,8 @@ jobs:
       uses: docker://docker
       with:
         args: docker restart rabbitmq
+    - name: Print working directory
+      run: pwd
     - name: Run unit tests
       env:
         RABBITMQ_SERVER: rabbitmq
