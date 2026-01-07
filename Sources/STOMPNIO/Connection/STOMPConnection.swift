@@ -443,8 +443,10 @@ public final actor STOMPConnection: Sendable {
                 switch tlsConfig {
                 case .niossl(let config):
                     tlsConfiguration = config
+                #if os(macOS)
                 default:
                     tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+                #endif
                 }
                 let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
                 let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: serverName)

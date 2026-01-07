@@ -3,6 +3,7 @@ import Logging
 import NIOCore
 import NIOEmbedded
 import NIOFoundationCompat
+import NIOPosix
 import STOMPNIO
 import Testing
 
