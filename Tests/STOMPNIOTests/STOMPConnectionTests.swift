@@ -182,9 +182,9 @@ struct STOMPConnectionTests {
                 tls: .enable(
                     .ts(
                         .init(
-                            trustRoots: .der(Self.rootPath + "/RabbitMQ/certs/ca.der"),
+                            trustRoots: .der(Self.rootPath + "/Certs/ca.der"),
                             clientIdentity: .p12(
-                                filename: Self.rootPath + "/RabbitMQ/certs/client.p12",
+                                filename: Self.rootPath + "/Certs/client.p12",
                                 password: "STOMPNIOClientCertPassword"
                             )
                         )
@@ -649,18 +649,18 @@ struct STOMPConnectionTests {
     static var _tlsConfiguration: STOMPConnectionConfiguration.TLS.Configuration {
         get throws {
             #if os(Linux) || os(Android)
-            let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/RabbitMQ/certs/ca.pem")
-            let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/RabbitMQ/certs/client.pem")
-            let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/RabbitMQ/certs/client.key", format: .pem)
+            let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/ca.pem")
+            let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/client.pem")
+            let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/Certs/client.key", format: .pem)
             var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
             tlsConfiguration.trustRoots = .certificates(rootCertificate)
             tlsConfiguration.certificateChain = certificate.map { .certificate($0) }
             tlsConfiguration.privateKey = .privateKey(privateKey)
             return .niossl(tlsConfiguration)
             #else
-            let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/RabbitMQ/certs/ca.der"))
+            let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/ca.der"))
             let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
-            let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/RabbitMQ/certs/client.p12"))
+            let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/client.p12"))
             let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
             var rawItems: CFArray?
             guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {

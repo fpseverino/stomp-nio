@@ -34,7 +34,7 @@ jobs:
       run: |
         brew install rabbitmq
         rabbitmq-plugins enable rabbitmq_stomp rabbitmq_web_stomp
-        brew services start rabbitmq
+        RABBITMQ_CONFIG_FILE=./RabbitMQ/rabbitmq rabbitmq-server -detached
     - name: Run unit tests
       run: swift test --enable-code-coverage
     - name: Upload coverage data

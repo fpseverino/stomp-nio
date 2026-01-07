@@ -75,7 +75,7 @@ function generateClientCertificate() {
     echo "Password: $PASSWORD"
 }
 
-cd "$HOME"/../RabbitMQ/certs/
+cd "$HOME"/../Certs/
 
 OUTPUT_ROOT=1
 OUTPUT_CLIENT=1
