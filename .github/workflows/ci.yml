@@ -73,7 +73,7 @@ jobs:
           - 61613:61613
         volumes:
           - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
-          - ${{ github.workspace }}/Certs:/etc/rabbitmq/Certs
+          - ${{ github.workspace }}/Certs:/Certs
     steps:
     - name: Install curl
       run: apt-get update -yq && apt-get install -y curl
