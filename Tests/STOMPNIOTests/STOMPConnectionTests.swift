@@ -126,17 +126,6 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Connect with WebSocket")
-    func webSocketConnect() async throws {
-        try await STOMPConnection.withConnection(
-            address: .hostname(Self.hostname, port: 15674),
-            configuration: .init(webSocket: .init()),
-            logger: self.logger
-        ) { connection in
-            try await connection.send("Test", to: "/queue/websocket")
-        }
-    }
-
     // TODO: Check if this is a RabbitMQ bug or a STOMPNIO bug
     @Test("Connect with WebSocket with TCP Port", .disabled())
     func webSocketTCPPort() async throws {
@@ -163,6 +152,7 @@ struct STOMPConnectionTests {
             try await connection.send("Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!", to: "/queue/tls")
         }
 
+        // Try consuming the message with a standard unencrypted TCP connection
         try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
             try await connection.subscribe(to: "/queue/tls") { subscription in
                 for try await frame in subscription {
