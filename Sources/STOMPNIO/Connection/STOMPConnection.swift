@@ -1,7 +1,13 @@
 public import Logging
 public import NIOCore
+import NIOHTTP1
 public import NIOPosix
+import NIOWebSocket
 import Synchronization
+
+#if os(macOS) || os(Linux) || os(Android)
+import NIOSSL
+#endif
 
 #if canImport(Network)
 import Network
@@ -201,46 +207,69 @@ public final actor STOMPConnection: Sendable {
     ) -> EventLoopFuture<STOMPConnection> {
         eventLoop.assertInEventLoop()
 
-        let bootstrap: any NIOClientTCPBootstrapProtocol
-        #if canImport(Network)
-        if let tsBootstrap = createTSBootstrap(eventLoopGroup: eventLoop, tlsOptions: nil) {
-            bootstrap = tsBootstrap
-        } else {
-            #if os(iOS) || os(tvOS)
-            logger.warning(
-                "Running BSD sockets on iOS or tvOS is not recommended. Please use NIOTSEventLoopGroup, to run with the Network framework"
-            )
-            #endif
-            bootstrap = self.createSocketsBootstrap(eventLoopGroup: eventLoop)
-        }
-        #else
-        bootstrap = self.createSocketsBootstrap(eventLoopGroup: eventLoop)
-        #endif
-
-        let connect = bootstrap.channelInitializer { channel in
-            do {
-                try self._setupChannel(channel, configuration: configuration, logger: logger)
-                return eventLoop.makeSucceededVoidFuture()
-            } catch {
-                return eventLoop.makeFailedFuture(error)
+        let host =
+            switch address.value {
+            case .hostname(let hostname, _):
+                hostname
+            case .unixDomainSocket(let path):
+                path
             }
+
+        let channelPromise = eventLoop.makePromise(of: (any Channel).self)
+
+        do {
+            let bootstrap = try Self.createBootstrap(configuration: configuration, eventLoopGroup: eventLoop, host: host, logger: logger)
+
+            let connect = bootstrap.channelInitializer { channel in
+                do {
+                    if let webSocketConfiguration = configuration.webSocket {
+                        // Prepare for WebSockets and on upgrade add handlers
+                        let promise = eventLoop.makePromise(of: Void.self)
+                        promise.futureResult.map { _ in channel }.cascade(to: channelPromise)
+
+                        return Self._setupChannelForWebSockets(
+                            channel,
+                            address: address,
+                            configuration: configuration,
+                            webSocketConfiguration: webSocketConfiguration,
+                            upgradePromise: promise
+                        ) {
+                            try self._setupChannel(channel, configuration: configuration, logger: logger)
+                        }
+                    } else {
+                        try self._setupChannel(channel, configuration: configuration, logger: logger)
+                    }
+                    return eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    channelPromise.fail(error)
+                    return eventLoop.makeFailedFuture(error)
+                }
+            }
+
+            let future: EventLoopFuture<any Channel>
+            switch address.value {
+            case .hostname(let host, let port):
+                future = connect.connect(host: host, port: port)
+                future.whenSuccess { _ in
+                    logger.debug("Client connected to \(host):\(port)")
+                }
+            case .unixDomainSocket(let path):
+                future = connect.connect(unixDomainSocketPath: path)
+                future.whenSuccess { _ in
+                    logger.debug("Client connected to socket path \(path)")
+                }
+            }
+
+            future.map { channel in
+                if configuration.webSocket == nil {
+                    channelPromise.succeed(channel)
+                }
+            }.cascadeFailure(to: channelPromise)
+        } catch {
+            channelPromise.fail(error)
         }
 
-        let future: EventLoopFuture<any Channel>
-        switch address.value {
-        case .hostname(let host, let port):
-            future = connect.connect(host: host, port: port)
-            future.whenSuccess { _ in
-                logger.debug("Client connected to \(host):\(port)")
-            }
-        case .unixDomainSocket(let path):
-            future = connect.connect(unixDomainSocketPath: path)
-            future.whenSuccess { _ in
-                logger.debug("Client connected to socket path \(path)")
-            }
-        }
-
-        return future.flatMapThrowing { channel in
+        return channelPromise.futureResult.flatMapThrowing { channel in
             let handler = try channel.pipeline.syncOperations.handler(type: STOMPChannelHandler.self)
             return STOMPConnection(
                 channel: channel,
@@ -307,28 +336,131 @@ public final actor STOMPConnection: Sendable {
         return stompChannelHandler
     }
 
-    /// Create a BSD sockets based bootstrap
-    private static func createSocketsBootstrap(eventLoopGroup: any EventLoopGroup) -> ClientBootstrap {
-        ClientBootstrap(group: eventLoopGroup)
+    private static func _setupChannelForWebSockets(
+        _ channel: any Channel,
+        address: STOMPServerAddress,
+        configuration: STOMPConnectionConfiguration,
+        webSocketConfiguration: STOMPConnectionConfiguration.WebSocket,
+        upgradePromise promise: EventLoopPromise<Void>,
+        afterHandlerAdded: @Sendable @escaping () throws -> Void
+    ) -> EventLoopFuture<Void> {
+        var hostHeader: String {
+            if case .enable(_, let sniServerName) = configuration.tls.base, let sniServerName {
+                return sniServerName
+            }
+            switch (configuration.tls.base, address.value) {
+            case (.enable, .hostname(let host, let port)) where port != 443:
+                return "\(host):\(port)"
+            case (.disable, .hostname(let host, let port)) where port != 80:
+                return "\(host):\(port)"
+            case (.enable, .hostname(let host, _)), (.disable, .hostname(let host, _)):
+                return host
+            case (.enable, .unixDomainSocket(let path)), (.disable, .unixDomainSocket(let path)):
+                return path
+            }
+        }
+
+        // Initial HTTP request handler, before upgrade
+        let httpHandler = STOMPWebSocketInitialRequestChannelHandler(
+            host: hostHeader,
+            urlPath: webSocketConfiguration.urlPath,
+            additionalHeaders: webSocketConfiguration.initialRequestHeaders,
+            upgradePromise: promise
+        )
+
+        // Create random request key
+        let requestKey = (0..<16).map { _ in UInt8.random(in: .min ... .max) }
+        let websocketUpgrader = NIOWebSocketClientUpgrader(
+            requestKey: Data(requestKey).base64EncodedString(),
+            maxFrameSize: webSocketConfiguration.maxFrameSize
+        ) { channel, _ in
+            let future = channel.eventLoop.makeCompletedFuture {
+                try channel.pipeline.syncOperations.addHandler(STOMPWebSocketChannelHandler())
+                try afterHandlerAdded()
+            }
+            future.cascade(to: promise)
+            return future
+        }
+        let upgradeConfig: NIOHTTPClientUpgradeSendableConfiguration = (
+            upgraders: [websocketUpgrader],
+            completionHandler: { _ in
+                channel.pipeline.removeHandler(httpHandler, promise: nil)
+            }
+        )
+
+        // Add HTTP handler with WebSocket upgrade
+        return channel.pipeline.addHTTPClientHandlers(withClientUpgrade: upgradeConfig).flatMap {
+            channel.pipeline.addHandler(httpHandler)
+        }
     }
 
-    #if canImport(Network)
-    /// Create a NIOTransportServices bootstrap using Network.framework
-    private static func createTSBootstrap(
+    private static func createBootstrap(
+        configuration: STOMPConnectionConfiguration,
         eventLoopGroup: any EventLoopGroup,
-        tlsOptions: NWProtocolTLS.Options?
-    ) -> NIOTSConnectionBootstrap? {
-        guard
-            let bootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoopGroup)
-        else {
-            return nil
+        host: String,
+        logger: Logger
+    ) throws -> NIOClientTCPBootstrap {
+        var serverName: String {
+            if case .enable(_, let sniServerName) = configuration.tls.base, let sniServerName {
+                sniServerName
+            } else {
+                host
+            }
         }
-        if let tlsOptions {
-            return bootstrap.tlsOptions(tlsOptions)
+
+        let bootstrap: NIOClientTCPBootstrap
+        #if canImport(Network)
+        // If the EventLoop is compatible with NIOTransportServices create a `NIOTSConnectionBootstrap`
+        if let tsBootstrap = NIOTSConnectionBootstrap(validatingGroup: eventLoopGroup) {
+            // Create `NIOClientTCPBootstrap` with NIOTS TLS provider
+            let options: NWProtocolTLS.Options
+            if case .enable(let tlsConfigType, _) = configuration.tls.base {
+                switch tlsConfigType {
+                case .ts(let tsConfig):
+                    options = try tsConfig.getNWProtocolTLSOptions(logger: logger)
+                #if os(macOS) || os(Linux) || os(Android)
+                case .niossl:
+                    throw STOMPClientError.wrongTLSConfig
+                #endif
+                }
+            } else {
+                options = NWProtocolTLS.Options()
+            }
+            sec_protocol_options_set_tls_server_name(options.securityProtocolOptions, serverName)
+            let tlsProvider = NIOTSClientTLSProvider(tlsOptions: options)
+            bootstrap = NIOClientTCPBootstrap(tsBootstrap, tls: tlsProvider)
+            if case .enable = configuration.tls.base {
+                return bootstrap.enableTLS()
+            }
+            return bootstrap
         }
-        return bootstrap
+        #endif
+
+        #if os(macOS) || os(Linux) || os(Android)
+        if let clientBootstrap = ClientBootstrap(validatingGroup: eventLoopGroup) {
+            if case .enable(let tlsConfig, _) = configuration.tls.base {
+                let tlsConfiguration: TLSConfiguration
+                switch tlsConfig {
+                case .niossl(let config):
+                    tlsConfiguration = config
+                #if os(macOS)
+                case .ts:
+                    throw STOMPClientError.wrongTLSConfig
+                #endif
+                }
+                let sslContext = try NIOSSLContext(configuration: tlsConfiguration)
+                let tlsProvider = try NIOSSLClientTLSProvider<ClientBootstrap>(context: sslContext, serverHostname: serverName)
+                bootstrap = NIOClientTCPBootstrap(clientBootstrap, tls: tlsProvider)
+                return bootstrap.enableTLS()
+            } else {
+                bootstrap = NIOClientTCPBootstrap(clientBootstrap, tls: NIOInsecureNoTLS())
+            }
+            return bootstrap
+        }
+        #endif
+
+        preconditionFailure("Cannot create bootstrap for the supplied EventLoop")
     }
-    #endif
 
     @usableFromInline
     func sendFrame(

@@ -27,7 +27,8 @@ components that this product depends on.
 -------------------------------------------------------------------------------
 
 This product was heavily influenced by MQTT NIO.
-It contains a derivation of MQTT NIO's 'MQTTTask.swift'.
+It contains a derivation of MQTT NIO's 'MQTTTask.swift', 'WebSocketInitialRequest.swift' and 'WebSocketHandler.swift'.
+It also contains a version of MQTT NIO's 'TSTLSConfiguration.swift'.
 
   * LICENSE (Apache License 2.0)
     * https://github.com/swift-server-community/mqtt-nio/blob/main/LICENSE

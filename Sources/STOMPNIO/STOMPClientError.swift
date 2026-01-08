@@ -16,6 +16,9 @@ public struct STOMPClientError: Error, Sendable, Equatable {
             case missingHeader
             /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
             case timeout
+            /// You have provided the wrong TLS configuration for the EventLoopGroup you provided
+            case wrongTLSConfig
+            case websocketUpgradeFailed
         }
 
         let base: Base
@@ -38,6 +41,9 @@ public struct STOMPClientError: Error, Sendable, Equatable {
         public static let missingHeader = Self(.missingHeader)
         /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
         public static let timeout = Self(.timeout)
+        /// You have provided the wrong TLS configuration for the EventLoopGroup you provided
+        public static let wrongTLSConfig = Self(.wrongTLSConfig)
+        public static let websocketUpgradeFailed = Self(.websocketUpgradeFailed)
 
         public var description: String {
             self.base.rawValue
@@ -114,6 +120,11 @@ public struct STOMPClientError: Error, Sendable, Equatable {
 
     /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
     public static let timeout = Self(errorType: .timeout)
+
+    /// You have provided the wrong TLS configuration for the EventLoopGroup you provided
+    public static let wrongTLSConfig = Self(errorType: .wrongTLSConfig)
+
+    public static let websocketUpgradeFailed = Self(errorType: .websocketUpgradeFailed)
 
     public static func == (lhs: STOMPClientError, rhs: STOMPClientError) -> Bool {
         lhs.backing == rhs.backing
