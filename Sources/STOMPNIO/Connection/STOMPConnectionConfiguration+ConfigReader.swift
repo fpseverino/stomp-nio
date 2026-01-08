@@ -13,6 +13,11 @@ extension STOMPConnectionConfiguration {
     /// - `stomp.connectTimeout` (int, optional, default: `10`): Maximum time to wait for the `CONNECTED` frame, in seconds.
     /// - `stomp.receiptTimeout` (int, optional, default: `30`): Maximum time to wait for a `RECEIPT` frame, in seconds.
     /// - `stomp.connectHeaders` (string array, optional): Additional user defined headers to include in the `CONNECT` frame, in the `<key>:<value>` format.
+    /// - `stomp.webSocket.urlPath` (string, optional): The URL path to use when establishing the WebSocket connection.
+    /// - `stomp.webSocket.maxFrameSize` (int, optional): The maximum frame size for the WebSocket connection.
+    /// - `stomp.webSocket.initialRequestHeaders` (string array, optional): Initial HTTP headers to include in the WebSocket handshake request.
+    ///
+    /// > Note: TLS configuration is not read from the `ConfigReader` and is disabled by default. You must set the `tls` property manually after initialization.
     ///
     /// - Parameter config: The config reader to read configuration values from.
     public init(config: ConfigReader) {
