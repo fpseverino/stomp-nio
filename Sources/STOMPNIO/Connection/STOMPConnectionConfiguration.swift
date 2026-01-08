@@ -44,7 +44,7 @@ public struct STOMPConnectionConfiguration: Sendable {
         ///   - configuration: The TLS configuration used to establish the secure connection
         ///   - tlsServerName: Optional server name for SNI (Server Name Indication)
         /// - Returns: A configured TLS instance
-        public static func enable(_ configuration: Configuration, tlsServerName: String?) throws -> Self {
+        public static func enable(_ configuration: Configuration, tlsServerName: String?) -> Self {
             .init(base: .enable(configuration, tlsServerName))
         }
     }

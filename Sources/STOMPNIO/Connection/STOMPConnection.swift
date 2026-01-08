@@ -444,8 +444,8 @@ public final actor STOMPConnection: Sendable {
                 case .niossl(let config):
                     tlsConfiguration = config
                 #if os(macOS)
-                default:
-                    tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+                case .ts:
+                    throw STOMPClientError.wrongTLSConfig
                 #endif
                 }
                 let sslContext = try NIOSSLContext(configuration: tlsConfiguration)

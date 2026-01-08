@@ -2,8 +2,8 @@
 
 set -eu
 
-HOME=$(dirname "$0")
-FULL_HOME="$(pwd)"/"$HOME"
+SCRIPT_HOME=$(dirname "$0")
+FULL_HOME="$(pwd)"/"$SCRIPT_HOME"
 SERVER=fpseverino.com
 
 function generateCA() {
@@ -75,7 +75,7 @@ function generateClientCertificate() {
     echo "Password: $PASSWORD"
 }
 
-cd "$HOME"/../Certs/
+cd "$SCRIPT_HOME"/../Certs/
 
 OUTPUT_ROOT=1
 OUTPUT_CLIENT=1

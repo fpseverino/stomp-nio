@@ -666,8 +666,12 @@ struct STOMPConnectionTests {
             guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
                 throw STOMPClientError.wrongTLSConfig
             }
-            let items = rawItems! as! [[String: Any]]
-            let firstItem = items[0]
+            guard
+                let items = rawItems as? [[String: Any]],
+                let firstItem = items.first
+            else {
+                throw STOMPClientError.wrongTLSConfig
+            }
             let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
             let tlsConfiguration = TSTLSConfiguration(
                 trustRoots: trustRootCertificates,
