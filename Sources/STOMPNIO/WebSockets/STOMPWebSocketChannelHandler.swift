@@ -83,7 +83,7 @@ final class STOMPWebSocketChannelHandler: ChannelDuplexHandler {
 
     /// Make mask key to be used in WebSocket frame
     func makeMaskKey() -> WebSocketMaskingKey? {
-        let bytes: [UInt8] = (0...3).map { _ in UInt8.random(in: .min ... .max) }
+        let bytes: [UInt8] = (0..<4).map { _ in UInt8.random(in: .min ... .max) }
         return WebSocketMaskingKey(bytes)
     }
 

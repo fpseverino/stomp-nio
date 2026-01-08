@@ -369,7 +369,7 @@ public final actor STOMPConnection: Sendable {
         )
 
         // Create random request key
-        let requestKey = (0..<16).map { _ in UInt8.random(in: .min ..< .max) }
+        let requestKey = (0..<16).map { _ in UInt8.random(in: .min ... .max) }
         let websocketUpgrader = NIOWebSocketClientUpgrader(
             requestKey: Data(requestKey).base64EncodedString(),
             maxFrameSize: webSocketConfiguration.maxFrameSize
