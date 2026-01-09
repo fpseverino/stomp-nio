@@ -71,6 +71,9 @@ jobs:
         options: --hostname rabbitmq --name rabbitmq
         ports:
           - 61613:61613
+          - 15674:15674
+          - 61614:61614
+          - 15673:15673
         volumes:
           - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
           - ${{ github.workspace }}/Certs:/Certs
