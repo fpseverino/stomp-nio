@@ -1,0 +1,26 @@
+# Run this with: `docker-compose -f docker-compose.yml run test`
+name: stomp-nio
+
+services:
+  test:
+    image: swift:6.2
+    working_dir: /stomp-nio
+    volumes:
+      - .:/stomp-nio
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_SERVER=rabbitmq
+      - CI=true
+    command: /bin/bash -xcl "swift test"
+  
+  rabbitmq:
+    image: rabbitmq:latest
+    ports:
+      - 61613:61613
+      - 15674:15674
+      - 61614:61614
+      - 15673:15673
+    volumes:
+      - ./RabbitMQ:/etc/rabbitmq
+      - ./Certs:/Certs

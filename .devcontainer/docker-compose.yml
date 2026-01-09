@@ -1,0 +1,24 @@
+name: stomp-nio-devcontainer
+
+services:
+  app:
+    image: swift:6.2
+    volumes:
+      - ..:/workspace
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_SERVER=rabbitmq
+      - CI=true
+    command: sleep infinity
+  
+  rabbitmq:
+    image: rabbitmq:latest
+    ports:
+      - 61613:61613
+      - 15674:15674
+      - 61614:61614
+      - 15673:15673
+    volumes:
+      - ../RabbitMQ:/etc/rabbitmq
+      - ../Certs:/Certs
