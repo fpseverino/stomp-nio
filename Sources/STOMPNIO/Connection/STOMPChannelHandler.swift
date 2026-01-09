@@ -470,6 +470,18 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             handler: HeartBeatSchedule(channelHandler: .init(self, eventLoop: self.eventLoop))
         )
     }
+
+    func heartBeat() throws {
+        self.eventLoop.assertInEventLoop()
+        switch self.stateMachine.sendFrame(nil) {
+        case .sendFrame(let context):
+            var buffer = context.channel.allocator.buffer(capacity: 1)
+            buffer.writeString("\n")
+            _ = context.writeAndFlush(self.wrapOutboundOut(buffer))
+        case .throwError(let error):
+            throw error
+        }
+    }
 }
 
 extension STOMPChannelHandler.Configuration {

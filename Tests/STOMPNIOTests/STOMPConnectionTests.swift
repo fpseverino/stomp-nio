@@ -293,6 +293,18 @@ struct STOMPConnectionTests {
             }
         }
 
+        @Test("Send Heart-beat", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func sendHeartBeat(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
+                configuration: .init(webSocket: webSocket),
+                logger: self.logger
+            ) { connection in
+                try await connection.heartBeat()
+                try await connection.triggerGracefulShutdown()
+            }
+        }
+
         let logger: Logger = {
             var logger = Logger(label: "HeartBeatingTests")
             logger.logLevel = .trace

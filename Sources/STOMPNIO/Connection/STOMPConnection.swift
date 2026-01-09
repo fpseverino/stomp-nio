@@ -166,6 +166,11 @@ public final actor STOMPConnection: Sendable {
         self.channelHandler.triggerGracefulShutdown()
     }
 
+    /// Send a heart-beat to the STOMP server.
+    public func heartBeat() throws {
+        try self.channelHandler.heartBeat()
+    }
+
     static func connect(
         address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration,
