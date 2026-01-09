@@ -5,6 +5,28 @@ public import NIOSSL
 #endif
 
 /// A configuration object that defines how to connect to a STOMP server.
+///
+/// ``STOMPConnectionConfiguration`` allows you to customize various aspects of the connection,
+/// including authentication credentials, timeouts, and TLS security settings.
+///
+/// Example usage:
+/// ```swift
+/// // Basic configuration
+/// let config = STOMPConnectionConfiguration()
+///
+/// // Configuration with authentication
+/// let authConfig = STOMPConnectionConfiguration(
+///     authentication: .init(login: "user", passcode: "pass"),
+///     receiptTimeout: .seconds(60)
+/// )
+///
+/// // Configuration with TLS
+/// let tlsConfig = TLSConfiguration.makeClientConfiguration()
+/// let secureConfig = STOMPConnectionConfiguration(
+///     authentication: .init(login: "user", passcode: "pass"),
+///     tls: .enable(.niossl(tlsConfig), tlsServerName: "your-stomp-broker.com")
+/// )
+/// ```
 public struct STOMPConnectionConfiguration: Sendable {
     /// Configuration for TLS (Transport Layer Security) encryption.
     ///

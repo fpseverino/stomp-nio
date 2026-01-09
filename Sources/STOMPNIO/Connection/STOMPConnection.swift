@@ -171,6 +171,14 @@ public final actor STOMPConnection: Sendable {
         try self.channelHandler.heartBeat()
     }
 
+    /// Connect to STOMP broker and return connection
+    ///
+    /// - Parameters:
+    ///   - address: Internet address of broker
+    ///   - configuration: Configuration of STOMP connection
+    ///   - eventLoop: `EventLoop` to run connection on
+    ///   - logger: `Logger` for connection
+    /// - Returns: ``STOMPConnection``
     static func connect(
         address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration,
