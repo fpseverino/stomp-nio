@@ -126,18 +126,6 @@ struct STOMPConnectionTests {
         }
     }
 
-    // TODO: Check if this is a RabbitMQ bug or a STOMPNIO bug
-    @Test("Connect with WebSocket with TCP Port", .disabled())
-    func webSocketTCPPort() async throws {
-        await #expect(throws: (any Error).self) {
-            try await STOMPConnection.withConnection(
-                address: .hostname(Self.hostname, port: 61613),
-                configuration: .init(webSocket: .init()),
-                logger: self.logger
-            ) { _ in }
-        }
-    }
-
     @Test("Connect with TLS", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
     func tlsConnect(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
         try await STOMPConnection.withConnection(
@@ -648,64 +636,40 @@ struct STOMPConnectionTests {
         #endif
     }
 
-    static var _tlsConfiguration: STOMPConnectionConfiguration.TLS.Configuration {
-        get throws {
-            #if os(Linux) || os(Android)
-            let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/ca.pem")
-            let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/client.pem")
-            let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/Certs/client.key", format: .pem)
-            var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
-            tlsConfiguration.trustRoots = .certificates(rootCertificate)
-            tlsConfiguration.certificateChain = certificate.map { .certificate($0) }
-            tlsConfiguration.privateKey = .privateKey(privateKey)
-            return .niossl(tlsConfiguration)
-            #else
-            let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/ca.der"))
-            let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
-            let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/client.p12"))
-            let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
-            var rawItems: CFArray?
-            guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
-                throw STOMPClientError.wrongTLSConfig
-            }
-            guard
-                let items = rawItems as? [[String: Any]],
-                let firstItem = items.first
-            else {
-                throw STOMPClientError.wrongTLSConfig
-            }
-            let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
-            let tlsConfiguration = TSTLSConfiguration(
-                trustRoots: trustRootCertificates,
-                clientIdentity: identity
-            )
-            return .ts(tlsConfiguration)
-            #endif
-        }
-    }
-
     static func getTLSConfiguration(
         withTrustRoots: Bool = true,
         withClientKey: Bool = true
     ) throws -> STOMPConnectionConfiguration.TLS.Configuration {
-        switch try Self._tlsConfiguration {
-        #if os(macOS) || os(Linux) || os(Android)
-        case .niossl(let config):
-            var tlsConfig = TLSConfiguration.makeClientConfiguration()
-            tlsConfig.trustRoots = withTrustRoots ? (config.trustRoots ?? .default) : .default
-            tlsConfig.certificateChain = withClientKey ? config.certificateChain : []
-            tlsConfig.privateKey = withClientKey ? config.privateKey : nil
-            return .niossl(tlsConfig)
-        #endif
-        #if canImport(Network)
-        case .ts(let config):
-            return .ts(
-                TSTLSConfiguration(
-                    trustRoots: withTrustRoots ? config.trustRoots : nil,
-                    clientIdentity: withClientKey ? config.clientIdentity : nil
-                )
-            )
-        #endif
+        #if os(Linux) || os(Android)
+        let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/ca.pem")
+        let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/client.pem")
+        let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/Certs/client.key", format: .pem)
+        var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+        tlsConfiguration.trustRoots = withTrustRoots ? .certificates(rootCertificate) : .default
+        tlsConfiguration.certificateChain = withClientKey ? certificate.map { .certificate($0) } : []
+        tlsConfiguration.privateKey = withClientKey ? .privateKey(privateKey) : nil
+        return .niossl(tlsConfiguration)
+        #else
+        let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/ca.der"))
+        let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
+        let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/client.p12"))
+        let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
+        var rawItems: CFArray?
+        guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
+            throw STOMPClientError.wrongTLSConfig
         }
+        guard
+            let items = rawItems as? [[String: Any]],
+            let firstItem = items.first
+        else {
+            throw STOMPClientError.wrongTLSConfig
+        }
+        let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
+        let tlsConfiguration = TSTLSConfiguration(
+            trustRoots: withTrustRoots ? trustRootCertificates : nil,
+            clientIdentity: withClientKey ? identity : nil
+        )
+        return .ts(tlsConfiguration)
+        #endif
     }
 }

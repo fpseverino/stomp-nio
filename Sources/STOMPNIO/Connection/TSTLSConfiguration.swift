@@ -14,12 +14,7 @@
 #if canImport(Network)
 @preconcurrency public import Security
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
 import Foundation
-#endif
-
 import Logging
 import Network
 #if os(macOS) || os(Linux) || os(Android)
