@@ -442,20 +442,20 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 // otherwise reschedule task
                 if channelHandler.lastHeartBeatTime + channelHandler.heartBeatFrequency <= .now() {
                     guard context.channel.isActive else { return }
-                    let loopBoundContext = NIOLoopBound(context, eventLoop: eventLoop)
                     var buffer = context.channel.allocator.buffer(capacity: 1)
                     buffer.writeString("\n")
                     context.writeAndFlush(channelHandler.wrapOutboundOut(buffer))
+                        .assumeIsolated()
                         .whenComplete { result in
                             switch result {
                             case .failure(let error):
-                                self.channelHandler.value.failTasksAndCloseSubscriptions(with: error)
-                                loopBoundContext.value.fireErrorCaught(error)
+                                channelHandler.failTasksAndCloseSubscriptions(with: error)
+                                context.fireErrorCaught(error)
                             case .success:
                                 break
                             }
-                            self.channelHandler.value.lastHeartBeatTime = .now()
-                            self.channelHandler.value.scheduleHeartBeatCallback()
+                            channelHandler.lastHeartBeatTime = .now()
+                            channelHandler.scheduleHeartBeatCallback()
                         }
                 } else {
                     channelHandler.scheduleHeartBeatCallback()
