@@ -21,7 +21,7 @@ import NIOTransportServices
 import NIOSSL
 #endif
 
-@Suite("STOMPConnection Tests", .serialized)
+@Suite("STOMPConnection Tests")
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
@@ -34,7 +34,10 @@ struct STOMPConnectionTests {
                     configuration: .init(webSocket: webSocket),
                     logger: self.subscriberLogger
                 ) { connection in
-                    try await connection.subscribe(to: "/queue/stomp-nio", ackMode: ackMode) { subscription in
+                    try await connection.subscribe(
+                        to: "/queue/stomp-nio-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                        ackMode: ackMode
+                    ) { subscription in
                         for try await frame in subscription {
                             #expect(String(buffer: frame.body) == "Hello, STOMP over NIO!")
                             return
@@ -49,7 +52,10 @@ struct STOMPConnectionTests {
                     configuration: .init(webSocket: webSocket),
                     logger: self.publisherLogger
                 ) { connection in
-                    try await connection.send("Hello, STOMP over NIO!", to: "/queue/stomp-nio")
+                    try await connection.send(
+                        "Hello, STOMP over NIO!",
+                        to: "/queue/stomp-nio-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")"
+                    )
                 }
             }
 
@@ -72,7 +78,10 @@ struct STOMPConnectionTests {
                     configuration: .init(webSocket: webSocket),
                     logger: self.subscriberLogger
                 ) { connection in
-                    try await connection.subscribe(to: "/queue/large-payload", ackMode: ackMode) { subscription in
+                    try await connection.subscribe(
+                        to: "/queue/large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                        ackMode: ackMode
+                    ) { subscription in
                         for try await frame in subscription {
                             var buffer = frame.body
                             let data = buffer.readData(length: buffer.readableBytes)
@@ -89,7 +98,11 @@ struct STOMPConnectionTests {
                     configuration: .init(webSocket: webSocket),
                     logger: self.publisherLogger
                 ) { connection in
-                    try await connection.send(payload, to: "/queue/large-payload", contentType: "application/octet-stream")
+                    try await connection.send(
+                        payload,
+                        to: "/queue/large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                        contentType: "application/octet-stream"
+                    )
                 }
             }
 
@@ -126,57 +139,120 @@ struct STOMPConnectionTests {
         }
     }
 
-    @Test("Connect with TLS", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
-    func tlsConnect(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
-        try await STOMPConnection.withConnection(
-            address: .hostname(Self.hostname, port: webSocket == nil ? 61614 : 15673),
-            configuration: .init(
-                tls: .enable(Self.getTLSConfiguration(), tlsServerName: "fpseverino.com"),
-                webSocket: webSocket
-            ),
-            eventLoop: Self.eventLoopGroupSingleton.any(),
-            logger: self.logger
-        ) { connection in
-            try await connection.send("Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!", to: "/queue/tls")
-        }
+    @Suite("TLS Tests", .serialized)
+    struct TLSTests {
+        @Test("Connect with TLS", arguments: [STOMPConnectionConfiguration.WebSocket(), nil])
+        func tlsConnect(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61614 : 15673),
+                configuration: .init(
+                    tls: .enable(Self.getTLSConfiguration(), tlsServerName: "fpseverino.com"),
+                    webSocket: webSocket
+                ),
+                eventLoop: Self.eventLoopGroupSingleton.any(),
+                logger: self.logger
+            ) { connection in
+                try await connection.send(
+                    "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!",
+                    to: "/queue/tls-\(webSocket == nil ? "tcp" : "websocket")"
+                )
+            }
 
-        // Try consuming the message with a standard unencrypted TCP connection
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
-            try await connection.subscribe(to: "/queue/tls") { subscription in
-                for try await frame in subscription {
-                    #expect(String(buffer: frame.body) == "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!")
-                    return
+            // Try consuming the message with a standard unencrypted TCP connection
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+                try await connection.subscribe(to: "/queue/tls-\(webSocket == nil ? "tcp" : "websocket")") { subscription in
+                    for try await frame in subscription {
+                        #expect(String(buffer: frame.body) == "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!")
+                        return
+                    }
                 }
             }
         }
-    }
 
-    #if canImport(Network)
-    @Test("Connect with TLS from P12")
-    func tlsConnectFromP12() async throws {
-        try await STOMPConnection.withConnection(
-            address: .hostname(Self.hostname, port: 61614),
-            configuration: .init(
-                tls: .enable(
-                    .ts(
-                        .init(
-                            trustRoots: .der(Self.rootPath + "/Certs/ca.der"),
-                            clientIdentity: .p12(
-                                filename: Self.rootPath + "/Certs/client.p12",
-                                password: "STOMPNIOClientCertPassword"
+        #if canImport(Network)
+        @Test("Connect with TLS from P12")
+        func tlsConnectFromP12() async throws {
+            try await STOMPConnection.withConnection(
+                address: .hostname(STOMPConnectionTests.hostname, port: 61614),
+                configuration: .init(
+                    tls: .enable(
+                        .ts(
+                            .init(
+                                trustRoots: .der(Self.rootPath + "/Certs/ca.der"),
+                                clientIdentity: .p12(
+                                    filename: Self.rootPath + "/Certs/client.p12",
+                                    password: "STOMPNIOClientCertPassword"
+                                )
                             )
-                        )
-                    ),
-                    tlsServerName: "fpseverino.com"
-                )
-            ),
-            eventLoop: Self.eventLoopGroupSingleton.any(),
-            logger: self.logger
-        ) { connection in
-            try await connection.send("Test", to: "/queue/tls-p12")
+                        ),
+                        tlsServerName: "fpseverino.com"
+                    )
+                ),
+                eventLoop: Self.eventLoopGroupSingleton.any(),
+                logger: self.logger
+            ) { connection in
+                try await connection.send("Test", to: "/queue/tls-p12")
+            }
+        }
+        #endif
+
+        let logger: Logger = {
+            var logger = Logger(label: "TLSTests")
+            logger.logLevel = .trace
+            return logger
+        }()
+
+        static let rootPath = #filePath
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .dropLast(3)
+            .joined(separator: "/")
+
+        static var eventLoopGroupSingleton: any EventLoopGroup {
+            #if canImport(Network)
+            // Return TS Eventloop for non-Linux builds, as we use TS TLS
+            NIOTSEventLoopGroup.singleton
+            #else
+            MultiThreadedEventLoopGroup.singleton
+            #endif
+        }
+
+        static func getTLSConfiguration(
+            withTrustRoots: Bool = true,
+            withClientKey: Bool = true
+        ) throws -> STOMPConnectionConfiguration.TLS.Configuration {
+            #if os(Linux) || os(Android)
+            let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/ca.pem")
+            let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/client.pem")
+            let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/Certs/client.key", format: .pem)
+            var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
+            tlsConfiguration.trustRoots = withTrustRoots ? .certificates(rootCertificate) : .default
+            tlsConfiguration.certificateChain = withClientKey ? certificate.map { .certificate($0) } : []
+            tlsConfiguration.privateKey = withClientKey ? .privateKey(privateKey) : nil
+            return .niossl(tlsConfiguration)
+            #else
+            let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/ca.der"))
+            let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
+            let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/client.p12"))
+            let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
+            var rawItems: CFArray?
+            guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
+                throw STOMPClientError.wrongTLSConfig
+            }
+            guard
+                let items = rawItems as? [[String: Any]],
+                let firstItem = items.first
+            else {
+                throw STOMPClientError.wrongTLSConfig
+            }
+            let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
+            let tlsConfiguration = TSTLSConfiguration(
+                trustRoots: withTrustRoots ? trustRootCertificates : nil,
+                clientIdentity: withClientKey ? identity : nil
+            )
+            return .ts(tlsConfiguration)
+            #endif
         }
     }
-    #endif
 
     @Test("Send Frame")
     func sendFrame() async throws {
@@ -277,7 +353,10 @@ struct STOMPConnectionTests {
                 logger: self.logger
             ) { connection in
                 try await Task.sleep(for: .seconds(5))
-                try await connection.send("Test after heart-beating", to: "/queue/heart-beating-broker")
+                try await connection.send(
+                    "Test after heart-beating",
+                    to: "/queue/heart-beating-broker-\(webSocket == nil ? "tcp" : "websocket")"
+                )
             }
         }
 
@@ -461,7 +540,10 @@ struct STOMPConnectionTests {
                 try await connection.withTransaction { transaction in
                     try await withThrowingTaskGroup { group in
                         group.addTask {
-                            try await transaction.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
+                            try await transaction.subscribe(
+                                to: "/queue/sub-transaction-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                                ackMode: ackMode
+                            ) { subscription in
                                 for try await frame in subscription {
                                     #expect(String(buffer: frame.body) == "Message in Transaction")
                                     return
@@ -470,7 +552,10 @@ struct STOMPConnectionTests {
                         }
 
                         group.addTask {
-                            try await connection.send("Message in Transaction", to: "/queue/sub-transaction")
+                            try await connection.send(
+                                "Message in Transaction",
+                                to: "/queue/sub-transaction-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")"
+                            )
                         }
 
                         try await group.waitForAll()
@@ -485,7 +570,10 @@ struct STOMPConnectionTests {
             ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
-                        try await connection.subscribe(to: "/queue/sub-transaction", ackMode: ackMode) { subscription in
+                        try await connection.subscribe(
+                            to: "/queue/sub-transaction-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                            ackMode: ackMode
+                        ) { subscription in
                             for try await _ in subscription {
                                 Issue.record("Should not receive the message, as the transaction has been aborted")
                             }
@@ -509,12 +597,17 @@ struct STOMPConnectionTests {
                 try await withThrowingTaskGroup { group in
                     group.addTask {
                         try await connection.withTransaction { transaction in
-                            try await transaction.send("Message in Transaction", to: "/queue/send-transaction")
+                            try await transaction.send(
+                                "Message in Transaction",
+                                to: "/queue/send-transaction-\(webSocket == nil ? "tcp" : "websocket")"
+                            )
                         }
                     }
 
                     group.addTask {
-                        try await connection.subscribe(to: "/queue/send-transaction") { subscription in
+                        try await connection.subscribe(
+                            to: "/queue/send-transaction-\(webSocket == nil ? "tcp" : "websocket")"
+                        ) { subscription in
                             for try await frame in subscription {
                                 #expect(String(buffer: frame.body) == "Message in Transaction")
                                 return
@@ -533,7 +626,10 @@ struct STOMPConnectionTests {
                 try? await connection.withTransaction { transaction in
                     try await withThrowingTaskGroup { group in
                         group.addTask {
-                            try await transaction.subscribe(to: "/queue/abort-sub-transaction", ackMode: ackMode) { subscription in
+                            try await transaction.subscribe(
+                                to: "/queue/abort-sub-transaction-\(ackMode)",
+                                ackMode: ackMode
+                            ) { subscription in
                                 for try await frame in subscription {
                                     // The message is received and the ACK is sent, but as part of the transaction
                                     #expect(String(buffer: frame.body) == "Message in Transaction")
@@ -543,7 +639,7 @@ struct STOMPConnectionTests {
                         }
 
                         group.addTask {
-                            try await connection.send("Message in Transaction", to: "/queue/abort-sub-transaction")
+                            try await connection.send("Message in Transaction", to: "/queue/abort-sub-transaction-\(ackMode)")
                         }
 
                         try await group.waitForAll()
@@ -555,7 +651,7 @@ struct STOMPConnectionTests {
             }
 
             try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
-                try await connection.subscribe(to: "/queue/abort-sub-transaction", ackMode: .clientIndividual) { subscription in
+                try await connection.subscribe(to: "/queue/abort-sub-transaction-\(ackMode)", ackMode: .clientIndividual) { subscription in
                     for try await frame in subscription {
                         // The queue still has the message, since the ACK was rolled back
                         #expect(String(buffer: frame.body) == "Message in Transaction")
@@ -575,13 +671,18 @@ struct STOMPConnectionTests {
                 try await withThrowingTaskGroup { group in
                     group.addTask {
                         try await connection.withTransaction { transaction in
-                            try await transaction.send("Message in Transaction", to: "/queue/abort-send-transaction")
+                            try await transaction.send(
+                                "Message in Transaction",
+                                to: "/queue/abort-send-transaction-\(webSocket == nil ? "tcp" : "websocket")"
+                            )
                             throw AbortTransaction()
                         }
                     }
 
                     group.addTask {
-                        try await connection.subscribe(to: "/queue/abort-send-transaction") { subscription in
+                        try await connection.subscribe(
+                            to: "/queue/abort-send-transaction-\(webSocket == nil ? "tcp" : "websocket")"
+                        ) { subscription in
                             for try await _ in subscription {
                                 Issue.record("Should not receive the message, as it was sent in a transaction that was aborted")
                             }
@@ -621,55 +722,4 @@ struct STOMPConnectionTests {
         logger.logLevel = .trace
         return logger
     }()
-
-    static let rootPath = #filePath
-        .split(separator: "/", omittingEmptySubsequences: false)
-        .dropLast(3)
-        .joined(separator: "/")
-
-    static var eventLoopGroupSingleton: any EventLoopGroup {
-        #if canImport(Network)
-        // Return TS Eventloop for non-Linux builds, as we use TS TLS
-        NIOTSEventLoopGroup.singleton
-        #else
-        MultiThreadedEventLoopGroup.singleton
-        #endif
-    }
-
-    static func getTLSConfiguration(
-        withTrustRoots: Bool = true,
-        withClientKey: Bool = true
-    ) throws -> STOMPConnectionConfiguration.TLS.Configuration {
-        #if os(Linux) || os(Android)
-        let rootCertificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/ca.pem")
-        let certificate = try NIOSSLCertificate.fromPEMFile(Self.rootPath + "/Certs/client.pem")
-        let privateKey = try NIOSSLPrivateKey(file: Self.rootPath + "/Certs/client.key", format: .pem)
-        var tlsConfiguration = TLSConfiguration.makeClientConfiguration()
-        tlsConfiguration.trustRoots = withTrustRoots ? .certificates(rootCertificate) : .default
-        tlsConfiguration.certificateChain = withClientKey ? certificate.map { .certificate($0) } : []
-        tlsConfiguration.privateKey = withClientKey ? .privateKey(privateKey) : nil
-        return .niossl(tlsConfiguration)
-        #else
-        let caData = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/ca.der"))
-        let trustRootCertificates = SecCertificateCreateWithData(nil, caData as CFData).map { [$0] }
-        let p12Data = try Data(contentsOf: URL(fileURLWithPath: Self.rootPath + "/Certs/client.p12"))
-        let options: [String: String] = [kSecImportExportPassphrase as String: "STOMPNIOClientCertPassword"]
-        var rawItems: CFArray?
-        guard SecPKCS12Import(p12Data as CFData, options as CFDictionary, &rawItems) == errSecSuccess else {
-            throw STOMPClientError.wrongTLSConfig
-        }
-        guard
-            let items = rawItems as? [[String: Any]],
-            let firstItem = items.first
-        else {
-            throw STOMPClientError.wrongTLSConfig
-        }
-        let identity = firstItem[kSecImportItemIdentity as String] as! SecIdentity?
-        let tlsConfiguration = TSTLSConfiguration(
-            trustRoots: withTrustRoots ? trustRootCertificates : nil,
-            clientIdentity: withClientKey ? identity : nil
-        )
-        return .ts(tlsConfiguration)
-        #endif
-    }
 }
