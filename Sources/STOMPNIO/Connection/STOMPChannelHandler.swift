@@ -197,16 +197,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func cancel(requestID: Int) {
         self.eventLoop.assertInEventLoop()
         switch self.stateMachine.cancel(requestID: requestID) {
-        case .failTasksAndClose(let context, let cancelled, let closeConnectionDueToCancel):
-            for command in cancelled {
-                command.promise.fail(STOMPClientError.cancelledTask)
-            }
-            for command in closeConnectionDueToCancel {
-                command.promise.fail(STOMPClientError.connectionClosedDueToCancellation)
-            }
-            self.failTasksAndCloseSubscriptions(with: STOMPClientError.cancelledTask)
-            context.fireErrorCaught(STOMPClientError.cancelledTask)
-            context.close(promise: nil)
+        case .failTask(let cancelledTask):
+            cancelledTask.promise.fail(STOMPClientError.cancelledTask)
         case .doNothing:
             break
         }

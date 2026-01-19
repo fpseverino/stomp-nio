@@ -495,32 +495,6 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Connection Close due to Cancellation")
-        func connectionCloseDueToCancellation() async throws {
-            let channel = NIOAsyncTestingChannel()
-            let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
-            try await channel.processConnect()
-
-            try await withThrowingTaskGroup { group in
-                group.addTask {
-                    await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
-                        try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
-                    }
-                }
-                try await withThrowingTaskGroup { group in
-                    group.addTask {
-                        await #expect(throws: STOMPClientError.cancelledTask) {
-                            try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
-                        }
-                    }
-                    // wait for outbound write from both tasks
-                    _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
-                    _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
-                    group.cancelAll()
-                }
-            }
-        }
-
         let logger: Logger = {
             var logger = Logger(label: "CancellationTests")
             logger.logLevel = .trace
