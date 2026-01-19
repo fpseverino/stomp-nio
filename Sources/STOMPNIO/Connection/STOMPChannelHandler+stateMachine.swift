@@ -69,10 +69,6 @@ extension STOMPChannelHandler {
                 self.tasks.isEmpty
             }
 
-            var count: Int {
-                self.tasks.count
-            }
-
             enum ProcessFrameAction {
                 case succeedTask(STOMPTask, DeadlineCallbackAction)
                 case failTask(STOMPTask, any Error)
@@ -256,14 +252,10 @@ extension STOMPChannelHandler {
                                 } else {
                                     self = .closing(state)
                                     let deadlineCallback: DeadlineCallbackAction =
-                                        if state.tasks.isEmpty {
-                                            .cancel
+                                        if let earliestDeadline = state.tasks.tasks.map({ $0.deadline }).min() {
+                                            .reschedule(earliestDeadline)
                                         } else {
-                                            if let earliestDeadline = state.tasks.tasks.map({ $0.deadline }).min() {
-                                                .reschedule(earliestDeadline)
-                                            } else {
-                                                .doNothing
-                                            }
+                                            .doNothing
                                         }
                                     return .succeedTask(task, deadlineCallback)
                                 }
@@ -440,7 +432,7 @@ extension STOMPChannelHandler {
                 self = .closing(.init(context: state.context, tasks: .init([state.connectTask])))
                 return .doNothing
             case .connected(let state):
-                if state.tasks.count > 0 {
+                if !state.tasks.isEmpty {
                     self = .closing(.init(context: state.context, tasks: state.tasks))
                     return .doNothing
                 } else {
