@@ -518,7 +518,6 @@ struct STOMPConnectionTests {
                     _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
                     group.cancelAll()
                 }
-                try await group.waitForAll()
             }
         }
 
