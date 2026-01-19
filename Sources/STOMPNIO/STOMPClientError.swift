@@ -10,8 +10,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
             case unsolicitedFrame
             /// The Task was cancelled
             case cancelledTask
-            /// Connection closed because another task was cancelled.
-            case connectionClosedDueToCancellation
             /// An expected header is missing from a frame
             case missingHeader
             /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
@@ -35,8 +33,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
         public static let unsolicitedFrame = Self(.unsolicitedFrame)
         /// The Task was cancelled
         public static let cancelledTask = Self(.cancelledTask)
-        /// Connection closed because another task was cancelled.
-        public static let connectionClosedDueToCancellation = Self(.connectionClosedDueToCancellation)
         /// An expected header is missing from a frame
         public static let missingHeader = Self(.missingHeader)
         /// Connection closed because it timed out while waiting for RECEIPT or CONNECTED frame
@@ -107,9 +103,6 @@ public struct STOMPClientError: Error, Sendable, Equatable {
 
     /// The Task was cancelled
     public static let cancelledTask = Self(errorType: .cancelledTask)
-
-    /// Connection closed because another task was cancelled.
-    public static let connectionClosedDueToCancellation = Self(errorType: .connectionClosedDueToCancellation)
 
     /// An expected header is missing from a frame
     ///

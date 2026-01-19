@@ -15,7 +15,7 @@ public struct STOMPFrame: Sendable, Equatable {
     ///   - command: The command of the frame.
     ///   - headers: The headers of the frame.
     ///   - body: Body bytes.
-    public init(command: Command, headers: STOMPHeaders, body: ByteBuffer = ByteBuffer()) {
+    public init(command: Command, headers: STOMPHeaders = [:], body: ByteBuffer = ByteBuffer()) {
         self.command = command
         self.headers = headers
         self.body = body
@@ -27,7 +27,7 @@ public struct STOMPFrame: Sendable, Equatable {
     ///   - command: The command of the frame.
     ///   - headers: The headers of the frame.
     ///   - body: Body bytes.
-    public init(command: Command, headers: [STOMPHeader], body: ByteBuffer = ByteBuffer()) {
+    public init(command: Command, headers: [STOMPHeader] = [], body: ByteBuffer = ByteBuffer()) {
         self.command = command
         self.headers = STOMPHeaders(headers: headers)
         self.body = body

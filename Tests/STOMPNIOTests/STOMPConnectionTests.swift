@@ -495,16 +495,16 @@ struct STOMPConnectionTests {
             }
         }
 
-        @Test("Connection Close due to Cancellation")
-        func connectionCloseDueToCancellation() async throws {
+        @Test("Cancellation does not Close Connection")
+        func cancellationDoesNotCloseConnection() async throws {
             let channel = NIOAsyncTestingChannel()
             let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
             try await channel.processConnect()
 
             try await withThrowingTaskGroup { group in
                 group.addTask {
-                    await #expect(throws: STOMPClientError.connectionClosedDueToCancellation) {
-                        try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
+                    await #expect(throws: Never.self) {
+                        try await connection.send(frame: STOMPFrame(command: .send, headers: [.receipt: "bar"]))
                     }
                 }
                 try await withThrowingTaskGroup { group in
@@ -513,10 +513,13 @@ struct STOMPConnectionTests {
                             try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
                         }
                     }
-                    // wait for outbound write from both tasks
+                    // Wait for outbound write from both tasks
                     _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
                     _ = try await channel.waitForOutboundWrite(as: ByteBuffer.self)
                     group.cancelAll()
+                    // Send RECEIPT frame to unblock the first task
+                    let receiptFrame = ByteBuffer(string: "RECEIPT\nreceipt-id:bar\n\n\u{0}")
+                    try await channel.writeInbound(receiptFrame)
                 }
             }
         }
