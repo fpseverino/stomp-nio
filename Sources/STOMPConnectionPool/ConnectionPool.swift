@@ -335,14 +335,14 @@ where
 
     @available(macOS 14.0, iOS 17.0, tvOS 17.0, watchOS 10.0, *)
     @inlinable
-    /* private */ func run(in taskGroup: inout DiscardingTaskGroup) async {
+    func run(in taskGroup: inout DiscardingTaskGroup) async {
         for await event in self.eventStream {
             self.runEvent(event, in: &taskGroup)
         }
     }
 
     @inlinable
-    /* private */ func run(in taskGroup: inout TaskGroup<Void>) async {
+    func run(in taskGroup: inout TaskGroup<Void>) async {
         var running = 0
         for await event in self.eventStream {
             running += 1
@@ -356,7 +356,7 @@ where
     }
 
     @inlinable
-    /* private */ func runEvent(_ event: NewPoolActions, in taskGroup: inout some TaskGroupProtocol) {
+    func runEvent(_ event: NewPoolActions, in taskGroup: inout some TaskGroupProtocol) {
         switch event {
         case .makeConnection(let request):
             self.makeConnection(for: request, in: &taskGroup)
@@ -372,7 +372,7 @@ where
     // MARK: Run actions
 
     @inlinable
-    /*private*/ func modifyStateAndRunActions(_ closure: (inout State) -> StateMachine.Action) {
+    func modifyStateAndRunActions(_ closure: (inout State) -> StateMachine.Action) {
         let actions = self.stateBox.withLockedValue { state -> StateMachine.Action in
             closure(&state)
         }
@@ -380,13 +380,13 @@ where
     }
 
     @inlinable
-    /*private*/ func runStateMachineActions(_ actions: StateMachine.Action) {
+    func runStateMachineActions(_ actions: StateMachine.Action) {
         self.runConnectionAction(actions.connection)
         self.runRequestAction(actions.request)
     }
 
     @inlinable
-    /*private*/ func runConnectionAction(_ action: StateMachine.ConnectionAction) {
+    func runConnectionAction(_ action: StateMachine.ConnectionAction) {
         switch action {
         case .makeConnection(let request, let timers):
             self.cancelTimers(timers)
@@ -433,7 +433,7 @@ where
     }
 
     @inlinable
-    /*private*/ func runRequestAction(_ action: StateMachine.RequestAction) {
+    func runRequestAction(_ action: StateMachine.RequestAction) {
         switch action {
         case .leaseConnection(let requests, let connection):
             let lease = ConnectionLease(connection: connection) { connection in
@@ -455,7 +455,7 @@ where
     }
 
     @inlinable
-    /*private*/ func makeConnection(for request: StateMachine.ConnectionRequest, in taskGroup: inout some TaskGroupProtocol) {
+    func makeConnection(for request: StateMachine.ConnectionRequest, in taskGroup: inout some TaskGroupProtocol) {
         taskGroup.addTask_ {
             self.observabilityDelegate.startedConnecting(id: request.connectionID)
 
@@ -479,7 +479,7 @@ where
     }
 
     @inlinable
-    /*private*/ func connectionEstablished(_ connectionBundle: ConnectionAndMetadata<Connection>) {
+    func connectionEstablished(_ connectionBundle: ConnectionAndMetadata<Connection>) {
         self.observabilityDelegate.connectSucceeded(
             id: connectionBundle.connection.id, streamCapacity: connectionBundle.maximalStreamsOnConnection)
 
@@ -493,7 +493,7 @@ where
     }
 
     @inlinable
-    /*private*/ func connectionEstablishFailed(_ error: any Error, for request: StateMachine.ConnectionRequest) {
+    func connectionEstablishFailed(_ error: any Error, for request: StateMachine.ConnectionRequest) {
         self.observabilityDelegate.connectFailed(id: request.connectionID, error: error)
 
         self.modifyStateAndRunActions { state in
@@ -503,7 +503,7 @@ where
     }
 
     @inlinable
-    /*private*/ func runKeepAlive(_ connection: Connection, in taskGroup: inout some TaskGroupProtocol) {
+    func runKeepAlive(_ connection: Connection, in taskGroup: inout some TaskGroupProtocol) {
         self.observabilityDelegate.keepAliveTriggered(id: connection.id)
 
         taskGroup.addTask_ {
@@ -526,7 +526,7 @@ where
     }
 
     @inlinable
-    /*private*/ func closeConnection(_ connection: Connection) {
+    func closeConnection(_ connection: Connection) {
         self.observabilityDelegate.connectionClosing(id: connection.id)
 
         connection.close()
@@ -540,7 +540,7 @@ where
     }
 
     @inlinable
-    /*private*/ func runTimer(_ timer: StateMachine.Timer, in poolGroup: inout some TaskGroupProtocol) {
+    func runTimer(_ timer: StateMachine.Timer, in poolGroup: inout some TaskGroupProtocol) {
         poolGroup.addTask_ { () async -> Void in
             await withTaskGroup(of: TimerRunResult.self, returning: Void.self) { taskGroup in
                 taskGroup.addTask {
@@ -587,7 +587,7 @@ where
     }
 
     @inlinable
-    /*private*/ func cancelTimers(_ cancellationTokens: some Sequence<CheckedContinuation<Void, Never>>) {
+    func cancelTimers(_ cancellationTokens: some Sequence<CheckedContinuation<Void, Never>>) {
         for token in cancellationTokens {
             token.resume()
         }

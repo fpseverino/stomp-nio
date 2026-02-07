@@ -178,7 +178,7 @@ extension PoolStateMachine {
         }
 
         @inlinable
-        /*private*/ mutating func createNewConnection() -> ConnectionRequest {
+        mutating func createNewConnection() -> ConnectionRequest {
             precondition(self.canGrow)
             self.stats.connecting += 1
             let connectionID = self.generator.next()
@@ -695,7 +695,7 @@ extension PoolStateMachine {
         // MARK: - Private functions -
 
         @inlinable
-        /*private*/ func getConnectionUse(index: Int) -> ConnectionUse {
+        func getConnectionUse(index: Int) -> ConnectionUse {
             switch index {
             case 0..<self.minimumConcurrentConnections:
                 return .persisted
@@ -709,7 +709,7 @@ extension PoolStateMachine {
         }
 
         @inlinable
-        /*private*/ func makeAvailableConnectionContextForConnection(at index: Int, info: ConnectionAvailableInfo)
+        func makeAvailableConnectionContextForConnection(at index: Int, info: ConnectionAvailableInfo)
             -> AvailableConnectionContext
         {
             precondition(self.connections[index].isAvailable)
@@ -718,12 +718,12 @@ extension PoolStateMachine {
         }
 
         @inlinable
-        /*private*/ func findAvailableConnection() -> Int? {
+        func findAvailableConnection() -> Int? {
             return self.connections.firstIndex(where: { $0.isAvailable })
         }
 
         @inlinable
-        /*private*/ mutating func swapForDeletion(index indexToDelete: Int) -> TimerCancellationToken? {
+        mutating func swapForDeletion(index indexToDelete: Int) -> TimerCancellationToken? {
             let maybeLastConnectedIndex = self.connections.lastIndex(where: { $0.isConnected })
 
             if maybeLastConnectedIndex == nil || maybeLastConnectedIndex! < indexToDelete {
@@ -780,7 +780,7 @@ extension PoolStateMachine {
         }
 
         @inlinable
-        /*private*/ mutating func removeO1(_ indexToDelete: Int) {
+        mutating func removeO1(_ indexToDelete: Int) {
             let lastIndex = self.connections.index(before: self.connections.endIndex)
 
             if indexToDelete == lastIndex {

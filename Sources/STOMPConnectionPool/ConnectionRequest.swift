@@ -53,7 +53,8 @@ extension ConnectionPool where Request == ConnectionRequest<Connection> {
                 throw CancellationError()
             }
 
-            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ConnectionLease<Connection>, any Error>) in
+            return try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<ConnectionLease<Connection>, any Error>) in
                 let request = Request(
                     id: requestID,
                     continuation: continuation

@@ -683,7 +683,7 @@ where
     }
 
     @inlinable
-    /*private*/ mutating func handleAvailableConnection(
+    mutating func handleAvailableConnection(
         index: Int,
         availableContext: ConnectionGroup.AvailableConnectionContext
     ) -> Action {
@@ -762,7 +762,7 @@ where
     }
 
     @inlinable
-    /* private */ mutating func createMultipleConnectionsAction(
+    mutating func createMultipleConnectionsAction(
         _ connectionCount: Int,
         cancelledTimers: TinyFastSequence<TimerCancellationToken>,
         scheduledTimers: Max2Sequence<Timer>
@@ -787,7 +787,7 @@ where
     }
 
     @inlinable
-    /* private */ func mapTimers(_ connectionTimer: ConnectionTimer) -> Timer {
+    func mapTimers(_ connectionTimer: ConnectionTimer) -> Timer {
         switch connectionTimer.usecase {
         case .backoff:
             return Timer(

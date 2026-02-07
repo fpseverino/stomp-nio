@@ -749,7 +749,7 @@ extension PoolStateMachine {
         // MARK: - Private Methods -
 
         @inlinable
-        mutating /*private*/ func _nextTimer() -> State.Timer {
+        mutating func _nextTimer() -> State.Timer {
             defer { self.nextTimerID += 1 }
             return State.Timer(id: self.nextTimerID)
         }
