@@ -16,20 +16,20 @@
 //===----------------------------------------------------------------------===//
 
 #if canImport(Darwin)
-import Darwin
+public import Darwin
 #elseif os(Windows)
-import ucrt
-import WinSDK
+public import ucrt
+public import WinSDK
 #elseif canImport(Glibc)
-import Glibc
+public import Glibc
 #elseif canImport(Musl)
-import Musl
+public import Musl
 #elseif canImport(Bionic)
-import Bionic
+public import Bionic
 #elseif canImport(WASILibc)
-import WASILibc
+public import WASILibc
 #if canImport(wasi_pthread)
-import wasi_pthread
+public import wasi_pthread
 #endif
 #else
 #error("The concurrency NIOLock module was unable to identify your C library.")

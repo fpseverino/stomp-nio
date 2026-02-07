@@ -49,10 +49,7 @@ let package = Package(
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
             path: "Sources/STOMPConnectionPool",
-            swiftSettings: [
-                .enableUpcomingFeature("MemberImportVisibility"),
-                .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
-            ]
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "STOMPNIOTests",
