@@ -398,7 +398,7 @@ extension PoolStateMachine {
                 return nil
             }
 
-            guard let connectionInfo = self.connections[index].release(streams: streams) else { 
+            guard let connectionInfo = self.connections[index].release(streams: streams) else {
                 return nil
             }
             self.stats.availableStreams += streams
@@ -423,7 +423,8 @@ extension PoolStateMachine {
                 return nil
             }
 
-            guard let action = self.connections[index].runKeepAliveIfIdle(reducesAvailableStreams: self.keepAliveReducesAvailableStreams) else {
+            guard let action = self.connections[index].runKeepAliveIfIdle(reducesAvailableStreams: self.keepAliveReducesAvailableStreams)
+            else {
                 return nil
             }
 
@@ -503,7 +504,7 @@ extension PoolStateMachine {
         @inlinable
         mutating func closeConnectionIfIdle(at index: Int) -> CloseAction? {
             guard let closeAction = self.connections[index].closeIfIdle() else {
-                return nil // apparently the connection isn't idle
+                return nil  // apparently the connection isn't idle
             }
 
             self.stats.idle -= 1
@@ -527,7 +528,7 @@ extension PoolStateMachine {
         @inlinable
         mutating func closeConnection(at index: Int, deleteConnection: Bool) -> CloseConnectionAction {
             guard let closeAction = self.connections[index].close() else {
-                return .doNothing // no action to take
+                return .doNothing  // no action to take
             }
 
             self.stats.runningKeepAlive -= closeAction.runningKeepAlive ? 1 : 0
@@ -550,10 +551,11 @@ extension PoolStateMachine {
             }
 
             if let connection = closeAction.connection {
-                return .close(CloseAction(
-                    connection: connection,
-                    timersToCancel: closeAction.cancelTimers
-                ))
+                return .close(
+                    CloseAction(
+                        connection: connection,
+                        timersToCancel: closeAction.cancelTimers
+                    ))
             } else {
                 // if there is no connection we should delete this now
                 var timersToCancel = closeAction.cancelTimers
@@ -707,7 +709,9 @@ extension PoolStateMachine {
         }
 
         @inlinable
-        /*private*/ func makeAvailableConnectionContextForConnection(at index: Int, info: ConnectionAvailableInfo) -> AvailableConnectionContext {
+        /*private*/ func makeAvailableConnectionContextForConnection(at index: Int, info: ConnectionAvailableInfo)
+            -> AvailableConnectionContext
+        {
             precondition(self.connections[index].isAvailable)
             let use = self.getConnectionUse(index: index)
             return AvailableConnectionContext(use: use, info: info)

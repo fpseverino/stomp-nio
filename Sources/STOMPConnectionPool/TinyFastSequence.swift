@@ -36,7 +36,7 @@ struct TinyFastSequence<Element>: Sequence {
                 reserveCapacity: 0
             )
         default:
-            if let collection = collection as? Array<Element> {
+            if let collection = collection as? [Element] {
                 self.base = .n(collection)
             } else {
                 self.base = .n(Array(collection))
@@ -106,7 +106,7 @@ struct TinyFastSequence<Element>: Sequence {
         case .two(let first, let second, let reservedCapacity):
             self.base = .two(first, second, reserveCapacity: Swift.max(reservedCapacity, minimumCapacity))
         case .n(var array):
-            self.base = .none(reserveCapacity: 0) // prevent CoW
+            self.base = .none(reserveCapacity: 0)  // prevent CoW
             array.reserveCapacity(minimumCapacity)
             self.base = .n(array)
         }
@@ -129,7 +129,7 @@ struct TinyFastSequence<Element>: Sequence {
             self.base = .n(new)
 
         case .n(var existing):
-            self.base = .none(reserveCapacity: 0) // prevent CoW
+            self.base = .none(reserveCapacity: 0)  // prevent CoW
             existing.append(element)
             self.base = .n(existing)
         }

@@ -230,7 +230,7 @@ extension PoolStateMachine {
             case .starting, .backingOff:
                 preconditionFailure("Invalid state: \(self.state)")
 
-            case .idle(let connection, let oldMaxStreams, let keepAlive, idleTimer: let idleTimer):
+            case .idle(let connection, let oldMaxStreams, let keepAlive, let idleTimer):
                 self.state = .idle(connection, maxStreams: newMaxStreams, keepAlive: keepAlive, idleTimer: idleTimer)
                 return NewMaxStreamInfo(
                     newMaxStreams: newMaxStreams,
@@ -250,7 +250,6 @@ extension PoolStateMachine {
                 return nil
             }
         }
-
 
         @inlinable
         mutating func parkConnection(scheduleKeepAliveTimer: Bool, scheduleIdleTimeoutTimer: Bool) -> Max2Sequence<ConnectionTimer> {
@@ -461,10 +460,10 @@ extension PoolStateMachine {
                 return nil
 
             case .backingOff, .starting,
-                 .leased(_, _, _, .notScheduled),
-                 .leased(_, _, _, .scheduled),
-                 .idle(_, _, .notScheduled, _),
-                 .idle(_, _, .scheduled, _):
+                .leased(_, _, _, .notScheduled),
+                .leased(_, _, _, .scheduled),
+                .idle(_, _, .notScheduled, _),
+                .idle(_, _, .scheduled, _):
                 preconditionFailure("Invalid state: \(self.state)")
             }
         }
@@ -515,15 +514,16 @@ extension PoolStateMachine {
                 case .idle(let connection, let maxStreams, .scheduled(var keepAliveTimerState), let idleTimerState):
                     if keepAliveTimerState.timerID == timer.timerID {
                         keepAliveTimerState.registerCancellationContinuation(cancelContinuation)
-                        self.state = .idle(connection, maxStreams: maxStreams, keepAlive: .scheduled(keepAliveTimerState), idleTimer: idleTimerState)
+                        self.state = .idle(
+                            connection, maxStreams: maxStreams, keepAlive: .scheduled(keepAliveTimerState), idleTimer: idleTimerState)
                         return nil
                     } else {
                         return cancelContinuation
                     }
 
-                case .starting, .backingOff, .leased, .closing, .closed, 
-                     .idle(_, _, .running, _),
-                     .idle(_, _, .notScheduled, _):
+                case .starting, .backingOff, .leased, .closing, .closed,
+                    .idle(_, _, .running, _),
+                    .idle(_, _, .notScheduled, _):
                     return cancelContinuation
                 }
             }
@@ -564,7 +564,6 @@ extension PoolStateMachine {
             var maxStreams: UInt16
             @usableFromInline
             var runningKeepAlive: Bool
-
 
             @inlinable
             init(
@@ -646,7 +645,7 @@ extension PoolStateMachine {
                     runningKeepAlive: keepAlive.isRunning
                 )
 
-            case .leased(let connection, usedStreams: let usedStreams, maxStreams: let maxStreams, var keepAlive):
+            case .leased(let connection, let usedStreams, let maxStreams, var keepAlive):
                 self.state = .closing(connection)
                 return CloseAction(
                     connection: connection,

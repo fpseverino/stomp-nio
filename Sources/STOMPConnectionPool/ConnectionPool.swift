@@ -1,4 +1,3 @@
-
 @available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
 public struct ConnectionAndMetadata<Connection: PooledConnection>: Sendable {
 
@@ -37,7 +36,7 @@ public protocol PooledConnection: AnyObject, Sendable {
     ///     }
     ///   }
     /// ```
-    func onClose(_ closure: @escaping @Sendable ((any Error)?) -> ())
+    func onClose(_ closure: @escaping @Sendable ((any Error)?) -> Void)
 
     /// Close the running connection. Once the close has completed
     /// closures that were registered in `onClose` must be
@@ -148,7 +147,8 @@ public final class ConnectionPool<
     KeepAliveBehavior: ConnectionKeepAliveBehavior,
     ObservabilityDelegate: ConnectionPoolObservabilityDelegate,
     Clock: _Concurrency.Clock
->: Sendable where
+>: Sendable
+where
     Connection.ID == ConnectionID,
     ConnectionIDGenerator.ID == ConnectionID,
     Request.Connection == Connection,
@@ -157,10 +157,18 @@ public final class ConnectionPool<
     ObservabilityDelegate.ConnectionID == ConnectionID,
     Clock.Duration == Duration
 {
-    public typealias ConnectionFactory = @Sendable (ConnectionID, ConnectionPool<Connection, ConnectionID, ConnectionIDGenerator, Request, RequestID, KeepAliveBehavior, ObservabilityDelegate, Clock>) async throws -> ConnectionAndMetadata<Connection>
+    public typealias ConnectionFactory =
+        @Sendable (
+            ConnectionID,
+            ConnectionPool<
+                Connection, ConnectionID, ConnectionIDGenerator, Request, RequestID, KeepAliveBehavior, ObservabilityDelegate, Clock
+            >
+        ) async throws -> ConnectionAndMetadata<Connection>
 
     @usableFromInline
-    typealias StateMachine = PoolStateMachine<Connection, ConnectionIDGenerator, ConnectionID, Request, Request.ID, CheckedContinuation<Void, Never>, Clock, Clock.Instant>
+    typealias StateMachine = PoolStateMachine<
+        Connection, ConnectionIDGenerator, ConnectionID, Request, Request.ID, CheckedContinuation<Void, Never>, Clock, Clock.Instant
+    >
 
     @usableFromInline
     let factory: ConnectionFactory
@@ -168,7 +176,7 @@ public final class ConnectionPool<
     @usableFromInline
     let keepAliveBehavior: KeepAliveBehavior
 
-    @usableFromInline 
+    @usableFromInline
     let observabilityDelegate: ObservabilityDelegate
 
     @usableFromInline
@@ -285,7 +293,7 @@ public final class ConnectionPool<
     public func run() async {
         await withTaskCancellationHandler {
             if #available(macOS 14.0, iOS 17.0, tvOS 17.0, watchOS 10.0, *) {
-                return await withDiscardingTaskGroup() { taskGroup in
+                return await withDiscardingTaskGroup { taskGroup in
                     await self.run(in: &taskGroup)
                 }
             }
@@ -472,7 +480,8 @@ public final class ConnectionPool<
 
     @inlinable
     /*private*/ func connectionEstablished(_ connectionBundle: ConnectionAndMetadata<Connection>) {
-        self.observabilityDelegate.connectSucceeded(id: connectionBundle.connection.id, streamCapacity: connectionBundle.maximalStreamsOnConnection)
+        self.observabilityDelegate.connectSucceeded(
+            id: connectionBundle.connection.id, streamCapacity: connectionBundle.maximalStreamsOnConnection)
 
         self.modifyStateAndRunActions { state in
             state.lastConnectError = nil
@@ -532,7 +541,7 @@ public final class ConnectionPool<
 
     @inlinable
     /*private*/ func runTimer(_ timer: StateMachine.Timer, in poolGroup: inout some TaskGroupProtocol) {
-        poolGroup.addTask_ { () async -> () in
+        poolGroup.addTask_ { () async -> Void in
             await withTaskGroup(of: TimerRunResult.self, returning: Void.self) { taskGroup in
                 taskGroup.addTask {
                     do {
@@ -567,7 +576,7 @@ public final class ConnectionPool<
                     self.runStateMachineActions(action)
 
                 case .timerCancelled:
-                    // the only way to reach this, is if the state machine decided to cancel the 
+                    // the only way to reach this, is if the state machine decided to cancel the
                     // timer. therefore we don't need to report it back!
                     break
                 }
@@ -587,7 +596,8 @@ public final class ConnectionPool<
 
 @available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
 extension PoolConfiguration {
-    init<KeepAliveBehavior: ConnectionKeepAliveBehavior>(_ configuration: ConnectionPoolConfiguration, keepAliveBehavior: KeepAliveBehavior) {
+    init<KeepAliveBehavior: ConnectionKeepAliveBehavior>(_ configuration: ConnectionPoolConfiguration, keepAliveBehavior: KeepAliveBehavior)
+    {
         self.minimumConnectionCount = configuration.minimumConnectionCount
         self.maximumConnectionSoftLimit = configuration.maximumConnectionSoftLimit
         self.maximumConnectionHardLimit = configuration.maximumConnectionHardLimit
