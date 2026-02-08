@@ -15,8 +15,7 @@ let package = Package(
     ],
     traits: [
         .trait(name: "ServiceLifecycle"),
-        .trait(name: "DistributedTracing"),
-        .default(enabledTraits: ["ServiceLifecycle", "DistributedTracing"]),
+        .default(enabledTraits: ["ServiceLifecycle"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.7.1"),
@@ -25,6 +24,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.26.0"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.4"),
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.8.0"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
     ],
     targets: [
@@ -39,6 +39,7 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl", condition: .when(platforms: [.linux, .macOS, .android])),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["ServiceLifecycle"])),
                 .product(name: "Configuration", package: "swift-configuration"),
             ],
             swiftSettings: swiftSettings
