@@ -596,8 +596,7 @@ where
 
 @available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
 extension PoolConfiguration {
-    init<KeepAliveBehavior: ConnectionKeepAliveBehavior>(_ configuration: ConnectionPoolConfiguration, keepAliveBehavior: KeepAliveBehavior)
-    {
+    init<KeepAliveBehavior: ConnectionKeepAliveBehavior>(_ configuration: ConnectionPoolConfiguration, keepAliveBehavior: KeepAliveBehavior) {
         self.minimumConnectionCount = configuration.minimumConnectionCount
         self.maximumConnectionSoftLimit = configuration.maximumConnectionSoftLimit
         self.maximumConnectionHardLimit = configuration.maximumConnectionHardLimit
