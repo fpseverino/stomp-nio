@@ -31,6 +31,7 @@ let package = Package(
         .target(
             name: "STOMPNIO",
             dependencies: [
+                .target(name: "_STOMPConnectionPool"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),

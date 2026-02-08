@@ -27,6 +27,8 @@ public final actor STOMPConnection: Sendable {
     /// Request ID generator
     @usableFromInline
     static let requestIDGenerator: IDGenerator = .init()
+    /// Connection ID, used by connection pool
+    public let id: ID
     /// Logger used by connection
     @usableFromInline
     let logger: Logger
@@ -37,8 +39,10 @@ public final actor STOMPConnection: Sendable {
     let configuration: STOMPConnectionConfiguration
     let isClosed: Atomic<Bool>
 
+    /// Initialize connection
     init(
         channel: any Channel,
+        connectionID: ID,
         channelHandler: STOMPChannelHandler,
         configuration: STOMPConnectionConfiguration,
         logger: Logger
@@ -47,6 +51,7 @@ public final actor STOMPConnection: Sendable {
         self.channel = channel
         self.channelHandler = channelHandler
         self.configuration = configuration
+        self.id = connectionID
         self.logger = logger
         self.isClosed = .init(false)
     }
@@ -70,6 +75,7 @@ public final actor STOMPConnection: Sendable {
     ) async throws -> sending Value {
         let connection = try await self.connect(
             address: address,
+            connectionID: 0,
             configuration: configuration,
             eventLoop: eventLoop,
             logger: logger
@@ -175,12 +181,14 @@ public final actor STOMPConnection: Sendable {
     ///
     /// - Parameters:
     ///   - address: Internet address of broker
+    ///   - connectionID: Connection identifier, used by connection pool
     ///   - configuration: Configuration of STOMP connection
     ///   - eventLoop: `EventLoop` to run connection on
     ///   - logger: `Logger` for connection
     /// - Returns: ``STOMPConnection``
     static func connect(
         address: STOMPServerAddress,
+        connectionID: ID,
         configuration: STOMPConnectionConfiguration,
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
         logger: Logger
@@ -189,6 +197,7 @@ public final actor STOMPConnection: Sendable {
             if eventLoop.inEventLoop {
                 self._makeConnection(
                     address: address,
+                    connectionID: connectionID,
                     configuration: configuration,
                     eventLoop: eventLoop,
                     logger: logger
@@ -197,6 +206,7 @@ public final actor STOMPConnection: Sendable {
                 eventLoop.flatSubmit {
                     self._makeConnection(
                         address: address,
+                        connectionID: connectionID,
                         configuration: configuration,
                         eventLoop: eventLoop,
                         logger: logger
@@ -214,6 +224,7 @@ public final actor STOMPConnection: Sendable {
 
     private static func _makeConnection(
         address: STOMPServerAddress,
+        connectionID: ID,
         configuration: STOMPConnectionConfiguration,
         eventLoop: any EventLoop,
         logger: Logger
@@ -286,6 +297,7 @@ public final actor STOMPConnection: Sendable {
             let handler = try channel.pipeline.syncOperations.handler(type: STOMPChannelHandler.self)
             return STOMPConnection(
                 channel: channel,
+                connectionID: connectionID,
                 channelHandler: handler,
                 configuration: configuration,
                 logger: logger
@@ -321,6 +333,7 @@ public final actor STOMPConnection: Sendable {
                     )
                     return STOMPConnection(
                         channel: channel,
+                        connectionID: 0,
                         channelHandler: handler,
                         configuration: configuration,
                         logger: logger
