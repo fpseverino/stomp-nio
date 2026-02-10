@@ -111,12 +111,33 @@ jobs:
 
   package-traits:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container: swift:6.2-bookworm
+    services:
+      rabbitmq:
+        image: rabbitmq:latest
+        options: --hostname rabbitmq --name rabbitmq
+        ports:
+          - 61613:61613
+          - 15674:15674
+          - 61614:61614
+          - 15673:15673
+        volumes:
+          - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
+          - ${{ github.workspace }}/Certs:/Certs
     steps:
-      - name: Check out code
-        uses: actions/checkout@v6
-      - name: Run tests with traits disabled
-        run: swift test --disable-default-traits
+    - name: Install curl
+      run: apt-get update -yq && apt-get install -y curl
+    - name: Check out code
+      uses: actions/checkout@v6
+    - name: Restart RabbitMQ
+      uses: docker://docker
+      with:
+        args: docker restart rabbitmq
+    - name: Run tests with traits disabled
+      env:
+        RABBITMQ_SERVER: rabbitmq
+      run: swift test --disable-default-traits
 
   lint:
     runs-on: ubuntu-latest
