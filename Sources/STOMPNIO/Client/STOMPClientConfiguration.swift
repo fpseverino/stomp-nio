@@ -97,21 +97,6 @@ public struct STOMPClientConfiguration: Sendable {
         }
     }
 
-    /// A keep-alive behavior for STOMP connections.
-    ///
-    /// The ``STOMPClientConfiguration/KeepAliveBehavior/frequency`` defines after which time an idle connection shall send a heart-beat.
-    public struct KeepAliveBehavior: Sendable {
-        /// The amount of time that shall pass before an idle connection sends a heart-beat.
-        public var frequency: Duration
-
-        /// Create a new ``STOMPClientConfiguration/KeepAliveBehavior``.
-        ///
-        /// - Parameter frequency: The amount of time that shall pass before an idle connection sends a heart-beat. Defaults to 30 seconds.
-        public init(frequency: Duration = .seconds(30)) {
-            self.frequency = frequency
-        }
-    }
-
     /// The connection pool definition for STOMP connections.
     public struct ConnectionPool: Hashable, Sendable {
         /// The minimum number of connections to preserve in the pool.
@@ -184,9 +169,6 @@ public struct STOMPClientConfiguration: Sendable {
     /// The connection pool configuration.
     public var connectionPool: ConnectionPool
 
-    /// The keep alive behavior for connections.
-    public var keepAliveBehavior: KeepAliveBehavior
-
     /// The maximum time to wait for the CONNECTED frame after sending the CONNECT frame.
     ///
     /// If the timeout is reached without receiving a CONNECTED frame,
@@ -237,7 +219,6 @@ public struct STOMPClientConfiguration: Sendable {
     public init(
         authentication: Authentication? = nil,
         connectionPool: ConnectionPool = .init(),
-        keepAliveBehavior: KeepAliveBehavior = .init(),
         connectTimeout: Duration = .seconds(10),
         receiptTimeout: Duration = .seconds(30),
         tls: TLS = .disable,
@@ -248,7 +229,6 @@ public struct STOMPClientConfiguration: Sendable {
     ) {
         self.authentication = authentication
         self.connectionPool = connectionPool
-        self.keepAliveBehavior = keepAliveBehavior
         self.connectTimeout = connectTimeout
         self.receiptTimeout = receiptTimeout
         self.tls = tls

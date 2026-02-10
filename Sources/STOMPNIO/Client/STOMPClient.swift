@@ -16,7 +16,7 @@ public final class STOMPClient: Sendable {
         ConnectionIDGenerator,
         ConnectionRequest<STOMPConnection>,
         ConnectionRequest.ID,
-        STOMPKeepAliveBehavior,
+        NoOpKeepAliveBehavior<STOMPConnection>,
         STOMPClientMetrics,
         ContinuousClock
     >
@@ -73,7 +73,7 @@ public final class STOMPClient: Sendable {
             configuration: poolConfiguration,
             idGenerator: connectionIDGenerator,
             requestType: ConnectionRequest<STOMPConnection>.self,
-            keepAliveBehavior: .init(connectionFactory.configuration.keepAliveBehavior),
+            keepAliveBehavior: .init(connectionType: STOMPConnection.self),
             observabilityDelegate: STOMPClientMetrics(logger: logger),
             clock: .continuous
         ) { (connectionID, pool) in

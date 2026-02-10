@@ -13,23 +13,6 @@ extension STOMPConnection: PooledConnection {
     }
 }
 
-/// Keep alive behavior for ``STOMPConnection``
-struct STOMPKeepAliveBehavior: ConnectionKeepAliveBehavior {
-    let behavior: STOMPClientConfiguration.KeepAliveBehavior?
-
-    init(_ behavior: STOMPClientConfiguration.KeepAliveBehavior?) {
-        self.behavior = behavior
-    }
-
-    var keepAliveFrequency: Duration? {
-        self.behavior?.frequency
-    }
-
-    func runKeepAlive(for connection: STOMPConnection) async throws {
-        _ = try await connection.heartBeat()
-    }
-}
-
 /// Connection ID generator for STOMP connection pool
 @usableFromInline
 package final class ConnectionIDGenerator: ConnectionIDGeneratorProtocol {
