@@ -109,6 +109,15 @@ jobs:
           build-tests: true
           run-tests: false
 
+  package-traits:
+    runs-on: ubuntu-latest
+    container: swift:6.2-bookworm
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Run tests with traits disabled
+        run: swift test --disable-default-traits
+
   lint:
     runs-on: ubuntu-latest
     container: swift:noble
