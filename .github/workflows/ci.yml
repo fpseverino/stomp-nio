@@ -95,6 +95,20 @@ jobs:
       with:
         codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Build for Android
+        uses: skiptools/swift-android-action@v2
+        with:
+          build-tests: true
+          run-tests: false
+
   lint:
     runs-on: ubuntu-latest
     container: swift:noble
