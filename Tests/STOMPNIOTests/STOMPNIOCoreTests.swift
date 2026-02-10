@@ -5,8 +5,8 @@ import Testing
 
 @testable import STOMPNIO
 
-@Suite("STOMP NIO Tests")
-struct STOMPNIOTests {
+@Suite("STOMP NIO Core Tests")
+struct STOMPNIOCoreTests {
     @Test("STOMP Command String Representation")
     func stompCommandStringRepresentation() {
         let command = STOMPFrame.Command.connect
