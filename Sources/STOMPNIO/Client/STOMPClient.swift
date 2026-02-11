@@ -212,6 +212,13 @@ extension STOMPClient {
             )
         }
     }
+
+    /// Send a heart-beat to the STOMP server.
+    public func heartBeat() async throws {
+        try await self.withConnection { connection in
+            try await connection.heartBeat()
+        }
+    }
 }
 
 #if ServiceLifecycle
