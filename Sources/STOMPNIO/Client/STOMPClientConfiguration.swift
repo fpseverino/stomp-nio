@@ -216,6 +216,18 @@ public struct STOMPClientConfiguration: Sendable {
     /// WebSocket configuration for the STOMP connection.
     public var webSocket: WebSocket?
 
+    /// Creates a STOMP client configuration.
+    ///
+    /// - Parameters:
+    ///   - authentication: Optional authentication credentials for accessing the STOMP server.
+    ///   - connectionPool: The connection pool configuration, defaults to a new instance of ``STOMPClientConfiguration/ConnectionPool``.
+    ///   - connectTimeout: The maximum time to wait for the CONNECTED frame after sending the CONNECT frame, defaults to 10 seconds.
+    ///   - receiptTimeout: The maximum time to wait for a RECEIPT frame before considering the connection dead, defaults to 30 seconds.
+    ///   - tls: TLS configuration for the connection, defaults to `.disable`.
+    ///   - virtualHost: The name of a virtual host that the client wishes to connect to, defaults to `nil`.
+    ///   - heartBeat: The heart-beating configuration for the STOMP connection, defaults to no heart-beats.
+    ///   - connectHeaders: Additional user defined headers to include in the `CONNECT` frame, defaults to an empty dictionary.
+    ///   - webSocket: WebSocket configuration for the STOMP connection, defaults to `nil`.
     public init(
         authentication: Authentication? = nil,
         connectionPool: ConnectionPool = .init(),

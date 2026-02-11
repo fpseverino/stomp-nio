@@ -1,3 +1,4 @@
+import Configuration
 import Logging
 import NIOCore
 import STOMPNIO
@@ -49,6 +50,16 @@ struct STOMPClientTests {
         }
     }
 
+    #if os(macOS)
+    @Test("Connect with Raw IP Address")
+    func rawIPConnect() async throws {
+        let client = STOMPClient(.hostname("127.0.0.1"), logger: self.logger)
+        async let _ = client.run()
+
+        try await client.send("Test", to: "/queue/client-raw-ip-address")
+    }
+    #endif
+
     #if canImport(Network)
     @Test("Connect with NIOTransportServices")
     func nioTransportServices() async throws {
@@ -61,6 +72,78 @@ struct STOMPClientTests {
         try await client.send("Test", to: "/queue/client-nio-transport-services")
     }
     #endif
+
+    @Suite("ConfigReader Tests")
+    struct ConfigReaderTests {
+        @Test("Configuration from ConfigReader")
+        func configReader() async throws {
+            let config = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "stomp.auth.login": "guest",
+                        "stomp.auth.passcode": "guest",
+                        "stomp.virtualHost": "/",
+                        "stomp.heartBeat.outgoing": 1000,
+                        "stomp.heartBeat.incoming": 1000,
+                        "stomp.connectTimeout": 15,
+                        "stomp.receiptTimeout": 45,
+                        "stomp.connectHeaders": ConfigValue(
+                            .stringArray(["header1:value1", "header2: value2"]),
+                            isSecret: false
+                        ),
+                        "stomp.webSocket.initialRequestHeaders": ConfigValue(
+                            .stringArray(["X-Custom-Header: CustomValue", "X-Another-Header: AnotherValue"]),
+                            isSecret: false
+                        ),
+                    ]
+                )
+            )
+
+            let client = STOMPClient(
+                .hostname(STOMPConnectionTests.hostname, port: 15674),
+                configuration: .init(config: config),
+                logger: self.logger
+            )
+            async let _ = client.run()
+
+            try await Task.sleep(for: .seconds(5))
+            try await client.send("Test", to: "/queue/client-config-reader")
+        }
+
+        @Test("Missing Configuration Values")
+        func missingConfigValues() async throws {
+            let config = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "stomp.auth.login": "guest",
+                        "stomp.virtualHost": "/",
+                        "stomp.heartBeat.outgoing": 1000,
+                        "stomp.connectTimeout": 15,
+                        "stomp.receiptTimeout": 45,
+                        "stomp.connectHeaders": ConfigValue(
+                            .stringArray(["invalid-header", "header2: value2"]),
+                            isSecret: false
+                        ),
+                    ]
+                )
+            )
+
+            let client = STOMPClient(
+                .hostname(STOMPConnectionTests.hostname),
+                configuration: .init(config: config),
+                logger: self.logger
+            )
+            async let _ = client.run()
+
+            try await client.send("Test", to: "/queue/client-config-reader")
+        }
+
+        let logger: Logger = {
+            var logger = Logger(label: "ConfigReaderTests")
+            logger.logLevel = .trace
+            return logger
+        }()
+    }
 
     let logger: Logger = {
         var logger = Logger(label: "STOMPClientTests")

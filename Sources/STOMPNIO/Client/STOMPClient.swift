@@ -54,7 +54,7 @@ public final class STOMPClient: Sendable {
         )
     }
 
-    init(
+    private init(
         _ address: STOMPServerAddress,
         connectionIDGenerator: ConnectionIDGenerator,
         connectionFactory: STOMPConnectionFactory,
