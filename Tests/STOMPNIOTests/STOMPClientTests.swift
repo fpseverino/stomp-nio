@@ -179,6 +179,23 @@ struct STOMPClientTests {
         }
     }
 
+    @Test("Connection Graceful Shutdown")
+    func connectionGracefulShutdown() async throws {
+        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        async let _ = client.run()
+
+        try await client.withConnection { connection in
+            try await connection.triggerGracefulShutdown()
+            await #expect(throws: STOMPClientError.connectionClosed) {
+                try await connection.send("Test", to: "/queue/client-graceful-shutdown")
+            }
+        }
+
+        await #expect(throws: Never.self) {
+            try await client.send("Test", to: "/queue/client-graceful-shutdown")
+        }
+    }
+
     #if canImport(Network)
     @Test("Connect with NIOTransportServices")
     func nioTransportServices() async throws {
