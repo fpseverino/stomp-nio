@@ -1,6 +1,7 @@
 import Configuration
 import Logging
 import NIOCore
+import NIOFoundationCompat
 import STOMPNIO
 import Testing
 
@@ -50,6 +51,50 @@ struct STOMPClientTests {
         }
     }
 
+    @Test(
+        "Publish Large Payload",
+        arguments: STOMPSubscription.AckMode.allCases, [STOMPClientConfiguration.WebSocket(maxFrameSize: 70000), nil]
+    )
+    func publishLargePayload(ackMode: STOMPSubscription.AckMode, webSocket: STOMPClientConfiguration.WebSocket?) async throws {
+        let payloadData = Data(count: 65537)
+        let payload = ByteBufferAllocator().buffer(data: payloadData)
+
+        let client = STOMPClient(
+            .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
+            configuration: .init(webSocket: webSocket),
+            logger: self.logger
+        )
+        async let _ = client.run()
+
+        try await withThrowingTaskGroup { group in
+            group.addTask {
+                try await client.withConnection { connection in
+                    try await connection.subscribe(
+                        to: "/queue/client-large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                        ackMode: ackMode
+                    ) { subscription in
+                        for try await frame in subscription {
+                            var buffer = frame.body
+                            let data = buffer.readData(length: buffer.readableBytes)
+                            #expect(data == payloadData)
+                            return
+                        }
+                    }
+                }
+            }
+
+            group.addTask {
+                try await client.send(
+                    payload,
+                    to: "/queue/client-large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                    contentType: "application/octet-stream"
+                )
+            }
+
+            try await group.waitForAll()
+        }
+    }
+
     #if os(macOS)
     @Test("Connect with Raw IP Address")
     func rawIPConnect() async throws {
@@ -59,6 +104,80 @@ struct STOMPClientTests {
         try await client.send("Test", to: "/queue/client-raw-ip-address")
     }
     #endif
+
+    @Test("Connect with Wrong Host and Port", .disabled())
+    func wrongHostAndPort() async throws {
+        await #expect(throws: (any Error).self) {
+            let client = STOMPClient(.hostname("invalid-host", port: 12345), logger: self.logger)
+            async let _ = client.run()
+
+            try await client.heartBeat()
+        }
+    }
+
+    @Test("Connect with Wrong Credentials", .disabled())
+    func wrongCredentials() async throws {
+        await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
+            let client = STOMPClient(
+                .hostname(Self.hostname),
+                configuration: .init(
+                    authentication: .init(login: "wrong-user", passcode: "wrong-pass")
+                ),
+                logger: self.logger
+            )
+            async let _ = client.run()
+
+            try await client.heartBeat()
+        }
+    }
+
+    @Test("Send Frame")
+    func sendFrame() async throws {
+        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        async let _ = client.run()
+
+        let frame = STOMPFrame(
+            command: .send,
+            headers: [
+                .destination: "/queue/send-frame",
+                .contentType: "text/plain",
+                .receipt: "sendFrame",
+            ],
+            body: ByteBuffer(string: "Test Message")
+        )
+
+        let receiptFrame = try await client.send(frame: frame)
+        #expect(receiptFrame != nil)
+        #expect(receiptFrame?.command == .receipt)
+    }
+
+    @Test("CONNECTED Timeout", .disabled())
+    func connectedTimeout() async throws {
+        await #expect(throws: STOMPClientError.timeout) {
+            let client = STOMPClient(
+                .hostname(Self.hostname),
+                configuration: .init(connectTimeout: .nanoseconds(1)),
+                logger: self.logger
+            )
+            async let _ = client.run()
+
+            try await client.heartBeat()
+        }
+    }
+
+    @Test("RECEIPT Timeout")
+    func receiptTimeout() async throws {
+        let client = STOMPClient(
+            .hostname(Self.hostname),
+            configuration: .init(receiptTimeout: .nanoseconds(1)),
+            logger: self.logger
+        )
+        async let _ = client.run()
+
+        await #expect(throws: STOMPClientError.timeout) {
+            try await client.send("Test", to: "/queue/client-receipt-timeout")
+        }
+    }
 
     #if canImport(Network)
     @Test("Connect with NIOTransportServices")
