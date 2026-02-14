@@ -105,32 +105,6 @@ struct STOMPClientTests {
     }
     #endif
 
-    @Test("Connect with Wrong Host and Port", .disabled())
-    func wrongHostAndPort() async throws {
-        await #expect(throws: (any Error).self) {
-            let client = STOMPClient(.hostname("invalid-host", port: 12345), logger: self.logger)
-            async let _ = client.run()
-
-            try await client.heartBeat()
-        }
-    }
-
-    @Test("Connect with Wrong Credentials", .disabled())
-    func wrongCredentials() async throws {
-        await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
-            let client = STOMPClient(
-                .hostname(Self.hostname),
-                configuration: .init(
-                    authentication: .init(login: "wrong-user", passcode: "wrong-pass")
-                ),
-                logger: self.logger
-            )
-            async let _ = client.run()
-
-            try await client.heartBeat()
-        }
-    }
-
     @Test("Send Frame")
     func sendFrame() async throws {
         let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
@@ -149,20 +123,6 @@ struct STOMPClientTests {
         let receiptFrame = try await client.send(frame: frame)
         #expect(receiptFrame != nil)
         #expect(receiptFrame?.command == .receipt)
-    }
-
-    @Test("CONNECTED Timeout", .disabled())
-    func connectedTimeout() async throws {
-        await #expect(throws: STOMPClientError.timeout) {
-            let client = STOMPClient(
-                .hostname(Self.hostname),
-                configuration: .init(connectTimeout: .nanoseconds(1)),
-                logger: self.logger
-            )
-            async let _ = client.run()
-
-            try await client.heartBeat()
-        }
     }
 
     @Test("RECEIPT Timeout")
@@ -279,6 +239,24 @@ struct STOMPClientTests {
             logger.logLevel = .trace
             return logger
         }()
+    }
+
+    @Test("Shutdown")
+    func shutdown() async throws {
+        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        try await withThrowingTaskGroup { group in
+            group.addTask {
+                await client.run()
+            }
+            group.addTask {
+                try await client.send("Test", to: "/queue/client-shutdown")
+            }
+            try await group.next()
+            group.cancelAll()
+        }
+        await #expect(throws: STOMPClientError.clientIsShutDown) {
+            try await client.send("Test", to: "/queue/client-shutdown")
+        }
     }
 
     let logger: Logger = {
