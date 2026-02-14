@@ -23,16 +23,28 @@ STOMPNIO is a Swift NIO based implementation of a STOMP client. It supports:
 
 ## Overview
 
-You can create a connection to a STOMP broker and send and receive messages from it using `STOMPConnection.withConnection`.
+The STOMP NIO project uses a connection pool, which requires a background process to manage it.
+You can either run it using a `TaskGroup` or `async let`.
+Below we are using `async let` to run the connection pool background process.
 
 ```swift
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
-    try await connection.send("Hello, STOMP over NIO!", to: "/queue/a")
-}
+let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+async let _ = stompClient.run()
+// use STOMP client
 ```
 
+Or you can use `STOMPClient` with [`swift-service-lifecycle`](https://github.com/swift-server/swift-service-lifecycle).
+
+Once you have a STOMP client setup and running you can send STOMP frames directly from the `STOMPClient`.
+
 ```swift
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
+try await stompClient.send("Hello, STOMP over NIO!", to: "/queue/a")
+```
+
+Or you can create a connection and subscribe to destinations from that connection using `STOMPClient.withConnection()`.
+
+```swift
+try await stompClient.withConnection { connection in
     try await connection.subscribe(to: "/queue/a") { subscription in
         for try await frame in subscription {
             print(String(buffer: frame.body))

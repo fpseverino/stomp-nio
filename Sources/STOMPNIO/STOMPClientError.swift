@@ -17,6 +17,10 @@ public struct STOMPClientError: Error, Sendable, Equatable {
             /// You have provided the wrong TLS configuration for the EventLoopGroup you provided
             case wrongTLSConfig
             case websocketUpgradeFailed
+            /// Client is shutdown
+            case clientIsShutDown
+            /// Connection pool connection creation circuit breaker triggered
+            case connectionCreationCircuitBreakerTripped
         }
 
         let base: Base
@@ -40,6 +44,10 @@ public struct STOMPClientError: Error, Sendable, Equatable {
         /// You have provided the wrong TLS configuration for the EventLoopGroup you provided
         public static let wrongTLSConfig = Self(.wrongTLSConfig)
         public static let websocketUpgradeFailed = Self(.websocketUpgradeFailed)
+        /// Client is shutdown
+        public static let clientIsShutDown = Self(.clientIsShutDown)
+        /// Connection pool connection creation circuit breaker triggered
+        public static let connectionCreationCircuitBreakerTripped = Self(.connectionCreationCircuitBreakerTripped)
 
         public var description: String {
             self.base.rawValue
@@ -118,6 +126,12 @@ public struct STOMPClientError: Error, Sendable, Equatable {
     public static let wrongTLSConfig = Self(errorType: .wrongTLSConfig)
 
     public static let websocketUpgradeFailed = Self(errorType: .websocketUpgradeFailed)
+
+    /// Client is shutdown
+    public static let clientIsShutDown = Self(errorType: .clientIsShutDown)
+
+    /// Connection pool connection creation circuit breaker triggered
+    public static let connectionCreationCircuitBreakerTripped = Self(errorType: .connectionCreationCircuitBreakerTripped)
 
     public static func == (lhs: STOMPClientError, rhs: STOMPClientError) -> Bool {
         lhs.backing == rhs.backing

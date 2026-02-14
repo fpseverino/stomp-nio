@@ -95,6 +95,50 @@ jobs:
       with:
         codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Build for Android
+        uses: skiptools/swift-android-action@v2
+        with:
+          build-tests: true
+          run-tests: false
+
+  package-traits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: swift:6.2-bookworm
+    services:
+      rabbitmq:
+        image: rabbitmq:latest
+        options: --hostname rabbitmq --name rabbitmq
+        ports:
+          - 61613:61613
+          - 15674:15674
+          - 61614:61614
+          - 15673:15673
+        volumes:
+          - ${{ github.workspace }}/RabbitMQ:/etc/rabbitmq
+          - ${{ github.workspace }}/Certs:/Certs
+    steps:
+    - name: Install curl
+      run: apt-get update -yq && apt-get install -y curl
+    - name: Check out code
+      uses: actions/checkout@v6
+    - name: Restart RabbitMQ
+      uses: docker://docker
+      with:
+        args: docker restart rabbitmq
+    - name: Run tests with traits disabled
+      env:
+        RABBITMQ_SERVER: rabbitmq
+      run: swift test --disable-default-traits
+
   lint:
     runs-on: ubuntu-latest
     container: swift:noble

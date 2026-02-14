@@ -38,9 +38,18 @@ It also contains a version of MQTT NIO's 'TSTLSConfiguration.swift'.
 ---
 
 This product was heavily influenced by valkey-swift.
-It contains a derivation of valkey-swift's 'ValkeySubscriptions.swift', 'ValkeyChannelHandler.swift' and 'ValkeyConnection.swift'.
+It contains a derivation of valkey-swift's 'ValkeyClient.swift', 'ValkeySubscriptions.swift', 'ValkeyChannelHandler.swift' and 'ValkeyConnection.swift'.
 
   * LICENSE (Apache License 2.0)
     * https://github.com/valkey-io/valkey-swift/blob/main/LICENSE.txt
   * HOMEPAGE:
     * https://github.com/valkey-io/valkey-swift
+
+---
+
+This product contains a version of the ConnectionPoolModule from postgres-nio
+
+  * LICENSE (MIT)
+    * https://github.com/vapor/postgres-nio/blob/main/LICENSE
+  * HOMEPAGE:
+    * https://github.com/vapor/postgres-nio

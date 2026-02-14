@@ -18,12 +18,18 @@ STOMPNIO is a Swift NIO based implementation of a STOMP client. It supports:
 
 ## Topics
 
+### Client
+
+- <doc:GettingStarted>
+- ``STOMPClient``
+- ``STOMPClientConfiguration``
+- ``STOMPServerAddress``
+- ``STOMPClientError``
+
 ### Connections
 
 - ``STOMPConnection``
-- ``STOMPServerAddress``
 - ``STOMPConnectionConfiguration``
-- ``STOMPClientError``
 
 ### Frames
 
