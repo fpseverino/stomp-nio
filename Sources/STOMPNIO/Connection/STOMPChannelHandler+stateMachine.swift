@@ -1,3 +1,4 @@
+import BasicContainers
 public import NIOCore
 
 extension STOMPChannelHandler {
@@ -28,38 +29,38 @@ extension STOMPChannelHandler {
         var state: State
 
         @usableFromInline
-        struct InitializedState {
+        struct InitializedState: ~Copyable {
             let context: Context
-            let connectTask: STOMPTask
+            var connectTask: STOMPTask
+            /// Cached `EventLoopPromise` from the connect task for `waitOnConnected`
+            let connectPromise: EventLoopPromise<STOMPFrame>
         }
 
         @usableFromInline
-        struct STOMPTasks {
-            var tasks: [STOMPTask]
+        struct STOMPTasks: ~Copyable {
+            var tasks: UniqueArray<STOMPTask>
 
-            init(_ tasks: [STOMPTask] = []) {
-                self.tasks = tasks
+            init() {
+                self.tasks = UniqueArray()
             }
 
-            mutating func append(_ task: STOMPTask) {
+            mutating func append(_ task: consuming STOMPTask) {
                 self.tasks.append(task)
             }
 
-            mutating func remove(at index: [STOMPTask].Index) {
+            mutating func remove(at index: UniqueArray<STOMPTask>.Index) -> STOMPTask {
                 if index == tasks.endIndex - 1 {
-                    self.tasks.removeLast()
+                    return self.tasks.removeLast()
                 } else {
-                    let lastTask = self.tasks.removeLast()
-                    self.tasks[index] = lastTask
+                    self.tasks.swapAt(index, self.tasks.endIndex - 1)
+                    return self.tasks.removeLast()
                 }
             }
 
-            mutating func removeFirst(where condition: (STOMPTask) -> Bool) -> STOMPTask? {
+            mutating func removeFirst(where condition: (borrowing STOMPTask) -> Bool) -> STOMPTask? {
                 for index in self.tasks.indices {
                     if condition(self.tasks[index]) {
-                        let task = self.tasks[index]
-                        self.remove(at: index)
-                        return task
+                        return self.remove(at: index)
                     }
                 }
                 return nil
@@ -69,40 +70,57 @@ extension STOMPChannelHandler {
                 self.tasks.isEmpty
             }
 
-            enum ProcessFrameAction {
+            var earliestDeadline: NIODeadline? {
+                var earliest: NIODeadline? = nil
+                for index in tasks.indices {
+                    let d = tasks[index].deadline
+                    if earliest == nil || d < earliest! {
+                        earliest = d
+                    }
+                }
+                return earliest
+            }
+
+            var deadlineCallbackAction: DeadlineCallbackAction {
+                if self.isEmpty {
+                    return .cancel
+                } else if let earliest = self.earliestDeadline {
+                    return .reschedule(earliest)
+                } else {
+                    return .doNothing
+                }
+            }
+
+            enum ProcessFrameAction: ~Copyable {
                 case succeedTask(STOMPTask, DeadlineCallbackAction)
                 case failTask(STOMPTask, any Error)
                 case unhandledTask
             }
             mutating func processFrame(_ frame: STOMPFrame) -> ProcessFrameAction {
-                for (index, task) in self.tasks.enumerated() {
+                for index in self.tasks.indices {
                     do {
                         // should this task respond to inbound frame
-                        if try task.checkInbound(frame) {
-                            self.remove(at: index)
-                            let deadlineCallback: DeadlineCallbackAction =
-                                if self.tasks.isEmpty {
-                                    .cancel
-                                } else {
-                                    if let earliestDeadline = self.tasks.map({ $0.deadline }).min() {
-                                        .reschedule(earliestDeadline)
-                                    } else {
-                                        .doNothing
-                                    }
-                                }
-                            return .succeedTask(task, deadlineCallback)
+                        if try self.tasks[index].checkInbound(frame) {
+                            let task = self.remove(at: index)
+                            return .succeedTask(task, self.deadlineCallbackAction)
                         }
                     } catch {
-                        self.remove(at: index)
+                        let task = self.remove(at: index)
                         return .failTask(task, error)
                     }
                 }
                 return .unhandledTask
             }
+
+            mutating func failAll(_ error: any Error) {
+                while !self.tasks.isEmpty {
+                    self.tasks.removeLast().fail(error)
+                }
+            }
         }
 
         @usableFromInline
-        struct ConnectedState {
+        struct ConnectedState: ~Copyable {
             let context: Context
             var tasks: STOMPTasks
 
@@ -123,10 +141,10 @@ extension STOMPChannelHandler {
 
         /// handler has become active
         @usableFromInline
-        mutating func setInitialized(context: Context, connectTask: STOMPTask) {
+        mutating func setInitialized(context: Context, connectTask: consuming STOMPTask, connectPromise: EventLoopPromise<STOMPFrame>) {
             switch consume self.state {
             case .uninitialized:
-                self = .initialized(.init(context: context, connectTask: connectTask))
+                self = .initialized(.init(context: context, connectTask: connectTask, connectPromise: connectPromise))
             case .initialized:
                 preconditionFailure("Cannot set initialized state when state is initialized")
             case .connected:
@@ -139,14 +157,14 @@ extension STOMPChannelHandler {
         }
 
         @usableFromInline
-        enum SendFrameAction {
+        enum SendFrameAction: ~Copyable {
             case sendFrame(Context)
-            case throwError(any Error)
+            case throwError(any Error, STOMPTask?)
         }
 
         /// handler wants to send a frame
         @usableFromInline
-        mutating func sendFrame(_ task: STOMPTask?) -> SendFrameAction {
+        mutating func sendFrame(_ task: consuming STOMPTask?) -> SendFrameAction {
             switch consume self.state {
             case .uninitialized:
                 preconditionFailure("Cannot send frame when uninitialized")
@@ -156,14 +174,15 @@ extension STOMPChannelHandler {
                 if let task {
                     state.tasks.append(task)
                 }
+                let context = state.context
                 self = .connected(state)
-                return .sendFrame(state.context)
+                return .sendFrame(context)
             case .closing(let state):
                 self = .closing(state)
-                return .throwError(STOMPClientError.connectionClosing)
+                return .throwError(STOMPClientError.connectionClosing, task)
             case .closed(let error):
                 self = .closed(error)
-                return .throwError(STOMPClientError.connectionClosed)
+                return .throwError(STOMPClientError.connectionClosed, task)
             }
         }
 
@@ -175,7 +194,7 @@ extension STOMPChannelHandler {
         }
 
         @usableFromInline
-        enum ReceivedFrameAction {
+        enum ReceivedFrameAction: ~Copyable {
             case messageReceived
             case succeedTask(STOMPTask, DeadlineCallbackAction)
             case failTask(STOMPTask, any Error)
@@ -191,8 +210,10 @@ extension STOMPChannelHandler {
             case .initialized(let state):
                 switch frame.command {
                 case .connected:
-                    self = .connected(.init(context: state.context, tasks: .init()))
-                    return .succeedTask(state.connectTask, .cancel)
+                    let context = state.context
+                    let connectTask = state.connectTask
+                    self = .connected(.init(context: context, tasks: .init()))
+                    return .succeedTask(connectTask, .cancel)
                 case .error:
                     let error = STOMPClientError.errorFrame(
                         message: frame.headers[.message],
@@ -213,7 +234,7 @@ extension STOMPChannelHandler {
                 case .receipt:
                     let action = state.tasks.processFrame(frame)
                     self = .connected(state)
-                    switch action {
+                    switch consume action {
                     case .succeedTask(let task, let deadlineCallback):
                         return .succeedTask(task, deadlineCallback)
                     case .failTask(let task, let error):
@@ -242,26 +263,21 @@ extension STOMPChannelHandler {
                     self = .closing(state)
                     return .messageReceived
                 case .receipt:
-                    for (index, task) in state.tasks.tasks.enumerated() {
+                    for index in state.tasks.tasks.indices {
                         do {
-                            if try task.checkInbound(frame) {
-                                state.tasks.remove(at: index)
+                            if try state.tasks.tasks[index].checkInbound(frame) {
+                                let task = state.tasks.remove(at: index)
                                 if state.tasks.isEmpty {
                                     self = .closed(nil)
                                     return .succeedTask(task, .cancel)
                                 } else {
+                                    let deadlineCallback = state.tasks.deadlineCallbackAction
                                     self = .closing(state)
-                                    let deadlineCallback: DeadlineCallbackAction =
-                                        if let earliestDeadline = state.tasks.tasks.map({ $0.deadline }).min() {
-                                            .reschedule(earliestDeadline)
-                                        } else {
-                                            .doNothing
-                                        }
                                     return .succeedTask(task, deadlineCallback)
                                 }
                             }
                         } catch {
-                            state.tasks.remove(at: index)
+                            let task = state.tasks.remove(at: index)
                             if state.tasks.isEmpty {
                                 self = .closed(nil)
                                 return .failTask(task, error)
@@ -306,13 +322,9 @@ extension STOMPChannelHandler {
             case .uninitialized:
                 preconditionFailure("Cannot wait until connection has succeeded")
             case .initialized(let state):
-                switch state.connectTask.promise {
-                case .nio(let promise):
-                    self = .initialized(state)
-                    return .waitForPromise(promise)
-                case .swift, .forget:
-                    preconditionFailure("Initialized state cannot be setup with a Swift continuation")
-                }
+                let promise = state.connectPromise
+                self = .initialized(state)
+                return .waitForPromise(promise)
             case .connected(let state):
                 self = .connected(state)
                 return .done
@@ -326,8 +338,8 @@ extension STOMPChannelHandler {
         }
 
         @usableFromInline
-        enum HitDeadlineAction {
-            case failTasksAndClose(Context, [STOMPTask])
+        enum HitDeadlineAction: ~Copyable {
+            case failTasksAndClose(Context, STOMPTasks)
             case reschedule(NIODeadline)
             case clearCallback
         }
@@ -338,18 +350,24 @@ extension STOMPChannelHandler {
             case .uninitialized:
                 preconditionFailure("Cannot cancel when uninitialized")
             case .initialized(let state):
-                if state.connectTask.deadline <= now {
+                let deadline = state.connectTask.deadline
+                if deadline <= now {
+                    let context = state.context
+                    var tasks = STOMPTasks()
+                    tasks.append(state.connectTask)
                     self = .closed(STOMPClientError.timeout)
-                    return .failTasksAndClose(state.context, [state.connectTask])
+                    return .failTasksAndClose(context, tasks)
                 } else {
                     self = .initialized(state)
-                    return .reschedule(state.connectTask.deadline)
+                    return .reschedule(deadline)
                 }
             case .connected(let state):
-                if let earliestDeadline = state.tasks.tasks.map({ $0.deadline }).min() {
+                if let earliestDeadline = state.tasks.earliestDeadline {
                     if earliestDeadline <= now {
+                        let context = state.context
+                        let tasks = state.tasks
                         self = .closed(STOMPClientError.timeout)
-                        return .failTasksAndClose(state.context, state.tasks.tasks)
+                        return .failTasksAndClose(context, tasks)
                     } else {
                         self = .connected(state)
                         return .reschedule(earliestDeadline)
@@ -362,10 +380,12 @@ extension STOMPChannelHandler {
                 guard !state.tasks.isEmpty else {
                     preconditionFailure("Cannot be in closing state with no active tasks")
                 }
-                if let earliestDeadline = state.tasks.tasks.map({ $0.deadline }).min() {
+                if let earliestDeadline = state.tasks.earliestDeadline {
                     if earliestDeadline <= now {
+                        let context = state.context
+                        let tasks = state.tasks
                         self = .closed(STOMPClientError.timeout)
-                        return .failTasksAndClose(state.context, state.tasks.tasks)
+                        return .failTasksAndClose(context, tasks)
                     } else {
                         self = .closing(state)
                         return .reschedule(earliestDeadline)
@@ -381,7 +401,7 @@ extension STOMPChannelHandler {
         }
 
         @usableFromInline
-        enum CancelAction {
+        enum CancelAction: ~Copyable {
             case failTask(STOMPTask)
             case doNothing
         }
@@ -429,11 +449,15 @@ extension STOMPChannelHandler {
                 self = .closed(nil)
                 return .doNothing
             case .initialized(let state):
-                self = .closing(.init(context: state.context, tasks: .init([state.connectTask])))
+                let context = state.context
+                var tasks = STOMPTasks()
+                tasks.append(state.connectTask)
+                self = .closing(.init(context: context, tasks: tasks))
                 return .doNothing
             case .connected(let state):
                 if !state.tasks.isEmpty {
-                    self = .closing(.init(context: state.context, tasks: state.tasks))
+                    let tasks = state.tasks
+                    self = .closing(.init(context: state.context, tasks: tasks))
                     return .doNothing
                 } else {
                     self = .closed(nil)
@@ -449,9 +473,9 @@ extension STOMPChannelHandler {
         }
 
         @usableFromInline
-        enum CloseAction {
+        enum CloseAction: ~Copyable {
             case doNothing
-            case failTasksAndClose([STOMPTask])
+            case failTasksAndClose(STOMPTasks)
         }
 
         /// Want to close the connection
@@ -463,13 +487,15 @@ extension STOMPChannelHandler {
                 return .doNothing
             case .initialized(let state):
                 self = .closed(nil)
-                return .failTasksAndClose([state.connectTask])
+                var tasks = STOMPTasks()
+                tasks.append(state.connectTask)
+                return .failTasksAndClose(tasks)
             case .connected(let state):
                 self = .closed(nil)
-                return .failTasksAndClose(state.tasks.tasks)
+                return .failTasksAndClose(state.tasks)
             case .closing(let state):
                 self = .closed(nil)
-                return .failTasksAndClose(state.tasks.tasks)
+                return .failTasksAndClose(state.tasks)
             case .closed(let error):
                 self = .closed(error)
                 return .doNothing
@@ -490,11 +516,13 @@ extension STOMPChannelHandler {
             case .initialized:
                 preconditionFailure("Cannot schedule heart-beat when in initialized state")
             case .connected(let state):
+                let context = state.context
                 self = .connected(state)
-                return .schedule(state.context)
+                return .schedule(context)
             case .closing(let state):
+                let context = state.context
                 self = .closing(state)
-                return .schedule(state.context)
+                return .schedule(context)
             case .closed(let error):
                 self = .closed(error)
                 return .doNothing
@@ -505,15 +533,15 @@ extension STOMPChannelHandler {
             StateMachine(.uninitialized)
         }
 
-        private static func initialized(_ state: InitializedState) -> Self {
+        private static func initialized(_ state: consuming InitializedState) -> Self {
             StateMachine(.initialized(state))
         }
 
-        private static func connected(_ state: ConnectedState) -> Self {
+        private static func connected(_ state: consuming ConnectedState) -> Self {
             StateMachine(.connected(state))
         }
 
-        private static func closing(_ state: ConnectedState) -> Self {
+        private static func closing(_ state: consuming ConnectedState) -> Self {
             StateMachine(.closing(state))
         }
 

@@ -31,11 +31,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         func handleScheduledCallback(eventLoop: some NIOCore.EventLoop) {
             let channelHandler = self.channelHandler.value
             switch channelHandler.stateMachine.hitDeadline(now: .now()) {
-            case .failTasksAndClose(let context, let commands):
+            case .failTasksAndClose(let context, var tasks):
                 let error = STOMPClientError.timeout
-                for command in commands {
-                    command.promise.fail(error)
-                }
+                tasks.failAll(error)
                 channelHandler.failTasksAndCloseSubscriptions(with: error)
                 context.fireErrorCaught(error)
                 context.close(promise: nil)
@@ -118,7 +116,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
         self.stateMachine.setInitialized(
             context: context,
-            connectTask: .init(promise: .nio(promise), requestID: 0, deadline: deadline) { $0.command == .connected }
+            connectTask: .init(promise: .nio(promise), requestID: 0, deadline: deadline) { $0.command == .connected },
+            connectPromise: promise
         )
     }
 
@@ -198,7 +197,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         self.eventLoop.assertInEventLoop()
         switch self.stateMachine.cancel(requestID: requestID) {
         case .failTask(let cancelledTask):
-            cancelledTask.promise.fail(STOMPClientError.cancelledTask)
+            cancelledTask.fail(STOMPClientError.cancelledTask)
         case .doNothing:
             break
         }
@@ -227,9 +226,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 }
             }
             self.processDeadlineCallbackAction(action: deadlineAction)
-            task.promise.succeed(frame)
+            task.succeed(frame)
         case .failTask(let task, let error):
-            task.promise.fail(error)
+            task.fail(error)
         case .unhandledTask:
             break
         case .messageReceived:
@@ -291,10 +290,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 
     private func failTasksAndCloseSubscriptions(with error: any Error) {
         switch self.stateMachine.close() {
-        case .failTasksAndClose(let tasks):
-            for task in tasks {
-                task.promise.fail(error)
-            }
+        case .failTasksAndClose(var tasks):
+            tasks.failAll(error)
             self.subscriptions.close(error: error)
             self.deadlineCallback?.cancel()
         case .doNothing:
@@ -317,7 +314,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         switch self.stateMachine.sendFrame(nil) {
         case .sendFrame(let context):
             _ = context.channel.writeAndFlush(frame)
-        case .throwError(let error):
+        case .throwError(let error, _):
             throw error
         }
     }
@@ -325,7 +322,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     func sendFrame(
         _ frame: STOMPFrame,
-        promise: STOMPPromise<STOMPFrame>,
+        promise: consuming STOMPPromise<STOMPFrame>,
         requestID: Int,
         checkInbound: @escaping @Sendable (STOMPFrame) throws -> Bool
     ) {
@@ -338,8 +335,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             if self.deadlineCallback == nil {
                 self.scheduleDeadlineCallback(deadline: deadline)
             }
-        case .throwError(let error):
-            task.promise.fail(error)
+        case .throwError(let error, let task):
+            task?.fail(error)
         }
     }
 
@@ -359,7 +356,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         ackMode: STOMPSubscription.AckMode,
         userDefinedHeaders: STOMPHeaders,
         transactionID: String?,
-        promise: STOMPPromise<UInt>,
+        continuation: CheckedContinuation<UInt, any Error>,
         requestID: Int
     ) {
         self.eventLoop.assertInEventLoop()
@@ -385,10 +382,10 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }.assumeIsolated().whenComplete { result in
             switch result {
             case .success:
-                promise.succeed(subscriptionID)
+                continuation.resume(returning: subscriptionID)
             case .failure(let error):
                 self.subscriptions.removeSubscription(id: subscriptionID)
-                promise.fail(error)
+                continuation.resume(throwing: error)
             }
         }
     }
@@ -396,7 +393,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func unsubscribe(
         id: UInt,
         userDefinedHeaders: STOMPHeaders,
-        promise: STOMPPromise<Void>,
+        continuation: CheckedContinuation<Void, any Error>,
         requestID: Int
     ) {
         self.eventLoop.assertInEventLoop()
@@ -414,9 +411,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         }.assumeIsolated().whenComplete { result in
             switch result {
             case .success:
-                promise.succeed(())
+                continuation.resume(returning: ())
             case .failure(let error):
-                promise.fail(error)
+                continuation.resume(throwing: error)
             }
         }
     }
@@ -470,7 +467,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             var buffer = context.channel.allocator.buffer(capacity: 1)
             buffer.writeString("\n")
             _ = context.writeAndFlush(self.wrapOutboundOut(buffer))
-        case .throwError(let error):
+        case .throwError(let error, _):
             throw error
         }
     }

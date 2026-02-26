@@ -498,7 +498,7 @@ public final actor STOMPConnection: Sendable {
             if Task.isCancelled {
                 throw STOMPClientError.cancelledTask
             }
-            return try await withCheckedThrowingContinuation { continuation in
+            return try await withSTOMPThrowingContinuation { continuation in
                 self.channelHandler.sendFrame(frame, promise: .swift(continuation), requestID: requestID, checkInbound: checkInbound)
             }
         } onCancel: {

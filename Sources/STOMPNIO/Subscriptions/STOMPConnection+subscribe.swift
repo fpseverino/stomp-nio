@@ -60,7 +60,7 @@ extension STOMPConnection {
                 ackMode: ackMode,
                 userDefinedHeaders: userDefinedHeaders,
                 transactionID: transactionID,
-                promise: .swift(continuation),
+                continuation: continuation,
                 requestID: Self.requestIDGenerator.next()
             )
         }
@@ -73,7 +73,7 @@ extension STOMPConnection {
             self.channelHandler.unsubscribe(
                 id: id,
                 userDefinedHeaders: userDefinedHeaders,
-                promise: .swift(continuation),
+                continuation: continuation,
                 requestID: Self.requestIDGenerator.next()
             )
         }
