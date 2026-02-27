@@ -18,7 +18,7 @@ let package = Package(
         .default(enabledTraits: ["ServiceLifecycle"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.7.1"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.10.1"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.91.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.36.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.26.0"),
