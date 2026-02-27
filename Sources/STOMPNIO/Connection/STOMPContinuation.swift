@@ -9,6 +9,7 @@ struct STOMPContinuation<Success, Failure: Error>: ~Copyable, Sendable {
         self.unsafeContinuation = unsafeContinuation
     }
 
+    @inlinable
     deinit {
         fatalError("This continuation was dropped.")
     }
