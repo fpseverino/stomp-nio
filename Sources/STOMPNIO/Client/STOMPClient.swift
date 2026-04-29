@@ -21,6 +21,14 @@ public final class STOMPClient: Sendable {
         ContinuousClock
     >
 
+    @usableFromInline
+    typealias ConnectionStateMachine =
+        SubscriptionConnectionStateMachine<
+            STOMPConnection,
+            CheckedContinuation<STOMPConnection, any Error>,
+            CheckedContinuation<Void, Never>
+        >
+
     /// Connection pool
     let connectionPool: Pool
     /// Connection factory
@@ -31,6 +39,17 @@ public final class STOMPClient: Sendable {
     let logger: Logger
     /// Running atomic
     let runningAtomic: Atomic<Bool>
+
+    /// Subscription connection state
+    let subscriptionConnectionStateMachine: Mutex<ConnectionStateMachine>
+    @usableFromInline
+    let subscriptionConnectionIDGenerator: ConnectionIDGenerator
+    /// Actions that can be run on a node
+    enum RunAction: Sendable {
+        case leaseSubscriptionConnection(leaseID: Int)
+    }
+    let actionStream: AsyncStream<RunAction>
+    let actionStreamContinuation: AsyncStream<RunAction>.Continuation
 
     /// Creates a new ``STOMPClient``. Don't forget to run ``STOMPClient/run()`` the client in a long running task.
     ///
@@ -93,6 +112,9 @@ public final class STOMPClient: Sendable {
         self.eventLoopGroup = eventLoopGroup
         self.logger = logger
         self.runningAtomic = .init(false)
+        self.subscriptionConnectionStateMachine = .init(.init())
+        self.subscriptionConnectionIDGenerator = .init()
+        (self.actionStream, self.actionStreamContinuation) = AsyncStream.makeStream(of: RunAction.self)
     }
 }
 
@@ -116,11 +138,26 @@ extension STOMPClient {
         precondition(!atomicOp.original, "STOMPClient.run() should just be called once!")
         #if ServiceLifecycle
         await cancelWhenGracefulShutdown {
-            await self.connectionPool.run()
+            await self._withTaskGroup()
         }
         #else
-        await self.connectionPool.run()
+        await self._withTaskGroup()
         #endif
+    }
+
+    /// Run discarding task group running actions
+    private func _withTaskGroup() async {
+        await withDiscardingTaskGroup { group in
+            group.addTask {
+                await self.connectionPool.run()
+                self.shutdownSubscriptionConnection()
+            }
+            for await action in self.actionStream {
+                group.addTask {
+                    await self.runAction(action)
+                }
+            }
+        }
     }
 
     /// Get a connection from connection pool and run operation using it.
@@ -217,6 +254,27 @@ extension STOMPClient {
     public func heartBeat() async throws {
         try await self.withConnection { connection in
             try await connection.heartBeat()
+        }
+    }
+}
+
+extension STOMPClient {
+    func queueAction(_ action: RunAction) {
+        self.actionStreamContinuation.yield(action)
+    }
+
+    private func runAction(_ action: RunAction) async {
+        switch action {
+        case .leaseSubscriptionConnection(let leaseID):
+            do {
+                try await self.withConnection { connection in
+                    await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                        self.acquiredSubscriptionConnection(leaseID: leaseID, connection: connection, releaseContinuation: cont)
+                    }
+                }
+            } catch {
+                self.errorAcquiringSubscriptionConnection(leaseID: leaseID, error: error)
+            }
         }
     }
 }
