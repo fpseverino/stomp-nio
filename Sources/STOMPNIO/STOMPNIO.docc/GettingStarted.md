@@ -88,7 +88,7 @@ Once you have your connection pool up and running the client is ready to use, yo
 try await stompClient.send("Hello, STOMP over NIO!", to: "/queue/a")
 ```
 
-You can ask for a single connection and subscribe to destinations using it:
+Or you can subscribe to destinations using `STOMPClient.subscribe`. A single connection is used for all subscriptions.
 
 ```swift
 try await stompClient.subscribe(to: "/queue/a") { subscription in

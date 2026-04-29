@@ -79,7 +79,7 @@ Once you have a STOMP client setup and running you can send STOMP frames directl
 try await stompClient.send("Hello, STOMP over NIO!", to: "/queue/a")
 ```
 
-Or you can create a connection and subscribe to destinations from that connection using `STOMPClient.withConnection()`.
+Or you can subscribe to destinations using `STOMPClient.subscribe`. A single connection is used for all subscriptions.
 
 ```swift
 try await stompClient.subscribe(to: "/queue/a") { subscription in
