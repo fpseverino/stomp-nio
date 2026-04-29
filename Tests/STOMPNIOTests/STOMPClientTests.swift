@@ -30,15 +30,13 @@ struct STOMPClientTests {
 
         try await withThrowingTaskGroup { group in
             group.addTask {
-                try await client.withConnection { connection in
-                    try await connection.subscribe(
-                        to: "/queue/stomp-client-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
-                        ackMode: ackMode
-                    ) { subscription in
-                        for try await frame in subscription {
-                            #expect(String(buffer: frame.body) == "Hello, STOMPClient!")
-                            return
-                        }
+                try await client.subscribe(
+                    to: "/queue/stomp-client-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                    ackMode: ackMode
+                ) { subscription in
+                    for try await frame in subscription {
+                        #expect(String(buffer: frame.body) == "Hello, STOMPClient!")
+                        return
                     }
                 }
             }
@@ -68,17 +66,15 @@ struct STOMPClientTests {
 
         try await withThrowingTaskGroup { group in
             group.addTask {
-                try await client.withConnection { connection in
-                    try await connection.subscribe(
-                        to: "/queue/client-large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
-                        ackMode: ackMode
-                    ) { subscription in
-                        for try await frame in subscription {
-                            var buffer = frame.body
-                            let data = buffer.readData(length: buffer.readableBytes)
-                            #expect(data == payloadData)
-                            return
-                        }
+                try await client.subscribe(
+                    to: "/queue/client-large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
+                    ackMode: ackMode
+                ) { subscription in
+                    for try await frame in subscription {
+                        var buffer = frame.body
+                        let data = buffer.readData(length: buffer.readableBytes)
+                        #expect(data == payloadData)
+                        return
                     }
                 }
             }

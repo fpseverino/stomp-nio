@@ -1,0 +1,331 @@
+import Logging
+import Synchronization
+
+extension STOMPClient {
+    @usableFromInline
+    func leaseSubscriptionConnection(id: Int, request: CheckedContinuation<STOMPConnection, any Error>) {
+        self.logger.trace("Get subscription connection", metadata: ["stomp_subscription_connection_id": .stringConvertible(id)])
+        enum LeaseAction {
+            case cancel
+            case action(ConnectionStateMachine.GetAction)
+        }
+        let action: LeaseAction = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            if Task.isCancelled {
+                return .cancel
+            }
+            return .action(stateMachine.get(id: id, request: request))
+        }
+        switch action {
+        case .cancel:
+            request.resume(throwing: CancellationError())
+        case .action(let getAction):
+            switch getAction {
+            case .startAcquire(let leaseID):
+                self.queueAction(.leaseSubscriptionConnection(leaseID: leaseID))
+            case .completeRequest(let connection):
+                request.resume(returning: connection)
+            case .doNothing:
+                break
+            }
+        }
+    }
+
+    func acquiredSubscriptionConnection(leaseID: Int, connection: STOMPConnection, releaseContinuation: CheckedContinuation<Void, Never>) {
+        let action = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            stateMachine.acquired(leaseID: leaseID, value: connection, releaseRequest: releaseContinuation)
+        }
+        switch action {
+        case .yield(let continuations):
+            for cont in continuations {
+                cont.resume(returning: connection)
+            }
+        case .release:
+            releaseContinuation.resume()
+        }
+
+    }
+
+    func errorAcquiringSubscriptionConnection(leaseID: Int, error: any Error) {
+        let action = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            stateMachine.errorAcquiring(leaseID: leaseID, error: error)
+        }
+        switch action {
+        case .yield(let continuations):
+            for cont in continuations {
+                cont.resume(throwing: error)
+            }
+        case .doNothing:
+            break
+        }
+
+    }
+
+    @usableFromInline
+    func releaseSubscriptionConnection(id: Int) {
+        self.logger.trace("Release subscription connection", metadata: ["stomp_subscription_connection_id": .stringConvertible(id)])
+        let action = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            stateMachine.release(id: id)
+        }
+        switch action {
+        case .release(let continuation):
+            continuation.resume()
+            self.logger.trace("Released connection for subscriptions")
+        case .doNothing:
+            break
+        }
+
+    }
+
+    @usableFromInline
+    func cancelSubscriptionConnection(id: Int) {
+        self.logger.trace("Cancel subscription connection", metadata: ["stomp_subscription_connection_id": .stringConvertible(id)])
+        let action = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            stateMachine.cancel(id: id)
+        }
+        switch action {
+        case .cancel(let cont):
+            cont.resume(throwing: CancellationError())
+        case .release(let continuation):
+            continuation.resume()
+            self.logger.trace("Released connection for subscriptions")
+        case .doNothing:
+            break
+        }
+    }
+
+    @usableFromInline
+    func shutdownSubscriptionConnection() {
+        self.logger.trace("Shutdown subscription connection")
+        let action = self.subscriptionConnectionStateMachine.withLock { stateMachine in
+            stateMachine.shutdown()
+        }
+        switch action {
+        case .yield(let continuations):
+            for cont in continuations {
+                cont.resume(throwing: STOMPClientError.connectionClosing)
+            }
+        case .release(let continuation):
+            continuation.resume()
+            self.logger.trace("Released connection for subscriptions")
+        case .doNothing:
+            break
+        }
+    }
+}
+
+/// StateMachine for acquiring Subscription Connection.
+@usableFromInline
+struct SubscriptionConnectionStateMachine<Value, Request, ReleaseRequest>: ~Copyable {
+    enum State: ~Copyable {
+        /// We have no connection
+        case uninitialized(nextLeaseID: Int)
+        /// We are acquiring a connection
+        case acquiring(leaseID: Int, waiters: [Int: Request])
+        /// We have a connection
+        case acquired(AcquiredState)
+        /// Connection is shutdown
+        case shutdown
+
+        struct AcquiredState {
+            var leaseID: Int
+            var value: Value
+            var requestIDs: Set<Int>
+            var releaseRequest: ReleaseRequest
+        }
+    }
+    var state: State
+
+    init() {
+        self.state = .uninitialized(nextLeaseID: 0)
+    }
+
+    init(state: consuming State) {
+        self.state = state
+    }
+
+    enum GetAction {
+        case startAcquire(Int)
+        case doNothing
+        case completeRequest(Value)
+    }
+
+    mutating func get(id: Int, request: Request) -> GetAction {
+        switch consume self.state {
+        case .uninitialized(let leaseID):
+            self = .acquiring(leaseID: leaseID, waiters: [id: request])
+            return .startAcquire(leaseID)
+        case .acquiring(let leaseID, var waiters):
+            waiters[id] = request
+            self = .acquiring(leaseID: leaseID, waiters: waiters)
+            return .doNothing
+        case .acquired(var state):
+            state.requestIDs.insert(id)
+            self = .acquired(state)
+            return .completeRequest(state.value)
+        case .shutdown:
+            preconditionFailure("Cannot get subscription connection when shutdown")
+        }
+    }
+
+    enum CancelAction {
+        case cancel(Request)
+        case release(ReleaseRequest)
+        case doNothing
+    }
+
+    mutating func cancel(id: Int) -> CancelAction {
+        switch consume self.state {
+        case .uninitialized(let leaseID):
+            self = .uninitialized(nextLeaseID: leaseID)
+            return .doNothing
+        case .acquiring(let leaseID, var waiters):
+            guard let continuation = waiters.removeValue(forKey: id) else {
+                self = .acquiring(leaseID: leaseID, waiters: waiters)
+                return .doNothing
+            }
+            if waiters.isEmpty {
+                self = .uninitialized(nextLeaseID: leaseID + 1)
+            } else {
+                self = .acquiring(leaseID: leaseID, waiters: waiters)
+            }
+            return .cancel(continuation)
+        case .acquired(var state):
+            state.requestIDs.remove(id)
+            if state.requestIDs.isEmpty {
+                self = .uninitialized(nextLeaseID: state.leaseID + 1)
+                return .release(state.releaseRequest)
+            } else {
+                self = .acquired(state)
+                return .doNothing
+            }
+        case .shutdown:
+            self = .shutdown
+            return .doNothing
+        }
+    }
+
+    enum AcquiredAction {
+        case yield([Request])
+        case release
+    }
+
+    mutating func acquired(leaseID: Int, value: Value, releaseRequest: ReleaseRequest) -> AcquiredAction {
+        switch consume self.state {
+        case .uninitialized(let leaseID):
+            self = .uninitialized(nextLeaseID: leaseID)
+            return .release
+        case .acquiring(let storedLeaseID, let waiters):
+            if storedLeaseID != leaseID {
+                self = .acquiring(leaseID: storedLeaseID, waiters: waiters)
+                return .release
+            }
+            let continuations = waiters.values
+            self = .acquired(.init(leaseID: leaseID, value: value, requestIDs: .init(waiters.keys), releaseRequest: releaseRequest))
+            return .yield(.init(continuations))
+        case .acquired(let state):
+            if state.leaseID != leaseID {
+                self = .acquired(state)
+                return .release
+            } else {
+                preconditionFailure("Acquired connection twice")
+            }
+        case .shutdown:
+            self = .shutdown
+            return .release
+        }
+    }
+
+    enum ErrorAcquiringAction {
+        case yield([Request])
+        case doNothing
+    }
+
+    mutating func errorAcquiring(leaseID: Int, error: any Error) -> ErrorAcquiringAction {
+        switch consume self.state {
+        case .uninitialized(let leaseID):
+            self = .uninitialized(nextLeaseID: leaseID)
+            return .doNothing
+        case .acquiring(let storedLeaseID, let waiters):
+            if storedLeaseID != leaseID {
+                self = .acquiring(leaseID: storedLeaseID, waiters: waiters)
+                return .doNothing
+            }
+            let continuations = waiters.values
+            self = .uninitialized(nextLeaseID: leaseID + 1)
+            return .yield(.init(continuations))
+        case .acquired(let state):
+            if state.leaseID != leaseID {
+                self = .acquired(state)
+                return .doNothing
+            } else {
+                preconditionFailure("Error acquiring connection we already have")
+            }
+        case .shutdown:
+            self = .shutdown
+            return .doNothing
+        }
+    }
+
+    enum ReleaseAction {
+        case release(ReleaseRequest)
+        case doNothing
+    }
+
+    mutating func release(id: Int) -> ReleaseAction {
+        switch consume self.state {
+        case .uninitialized:
+            preconditionFailure("Cannot release connection when in an uninitialized state")
+        case .acquiring:
+            preconditionFailure("Cannot release connection while acquiring a new connection")
+        case .acquired(var state):
+            state.requestIDs.remove(id)
+            if state.requestIDs.isEmpty {
+                self = .uninitialized(nextLeaseID: state.leaseID + 1)
+                return .release(state.releaseRequest)
+            } else {
+                self = .acquired(state)
+                return .doNothing
+            }
+        case .shutdown:
+            self = .shutdown
+            return .doNothing
+        }
+    }
+
+    enum ShutdownAction {
+        case yield([Request])
+        case release(ReleaseRequest)
+        case doNothing
+    }
+
+    mutating func shutdown() -> ShutdownAction {
+        switch consume self.state {
+        case .uninitialized(let leaseID):
+            self = .uninitialized(nextLeaseID: leaseID)
+            return .doNothing
+        case .acquiring(let storedLeaseID, let waiters):
+            self = .uninitialized(nextLeaseID: storedLeaseID + 1)
+            return .yield(.init(waiters.values))
+        case .acquired(let state):
+            self = .uninitialized(nextLeaseID: state.leaseID + 1)
+            return .release(state.releaseRequest)
+        case .shutdown:
+            self = .shutdown
+            return .doNothing
+        }
+    }
+
+    func isEmpty() -> Bool {
+        switch self.state {
+        case .uninitialized: true
+        case .acquiring: false
+        case .acquired: false
+        case .shutdown: true
+        }
+    }
+
+    static private func uninitialized(nextLeaseID: Int) -> Self { .init(state: .uninitialized(nextLeaseID: nextLeaseID)) }
+    static private func acquiring(leaseID: Int, waiters: [Int: Request]) -> Self { .init(state: .acquiring(leaseID: leaseID, waiters: waiters)) }
+    static private func acquired(_ state: State.AcquiredState) -> Self { .init(state: .acquired(state)) }
+    static private var shutdown: Self { .init(state: .shutdown) }
+}
