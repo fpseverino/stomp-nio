@@ -30,7 +30,7 @@ try await STOMPConnection.withConnection(address: .hostname("localhost"), logger
 ```
 
 ```swift
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
+try await stompClient.withConnection { connection in
     try await connection.withTransaction { transaction in
         try await transaction.subscribe(to: "/queue/a") { subscription in
             for try await frame in subscription {
@@ -71,7 +71,7 @@ If you want to abort the transaction instead, you can throw an error from the cl
 ```swift
 struct AbortTransaction: Error {}
 
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
+try await stompClient.withConnection { connection in
     try await connection.withTransaction { transaction in
         try await transaction.send("Message in Transaction", to: "/queue/a")
         throw AbortTransaction()

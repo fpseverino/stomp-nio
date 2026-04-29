@@ -11,13 +11,13 @@ Add STOMP NIO as a dependency to your project and targets that use it.
 You can use the `add-dependency` command:
 
 ```bash
-swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.0.5
+swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.0.6
 ```
 
 or edit Package.swift directly:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.0.5"),
+    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.0.6"),
 ]
 ```
 
@@ -91,11 +91,9 @@ try await stompClient.send("Hello, STOMP over NIO!", to: "/queue/a")
 You can ask for a single connection and subscribe to destinations using it:
 
 ```swift
-try await stompClient.withConnection { connection in
-    try await connection.subscribe(to: "/queue/a") { subscription in
-        for try await frame in subscription {
-            print(String(buffer: frame.body))
-        }
+try await stompClient.subscribe(to: "/queue/a") { subscription in
+    for try await frame in subscription {
+        print(String(buffer: frame.body))
     }
 }
 ```

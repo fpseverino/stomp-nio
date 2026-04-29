@@ -23,17 +23,55 @@ STOMPNIO is a Swift NIO based implementation of a STOMP client. It supports:
 
 ## Overview
 
-The STOMP NIO project uses a connection pool, which requires a background process to manage it.
-You can either run it using a `TaskGroup` or `async let`.
-Below we are using `async let` to run the connection pool background process.
+Create a client with server connection details:
+
+```swift
+import STOMPNIO
+
+let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+```
+
+The `STOMPClient` uses a connection pool, which requires a background process to manage it.
+
+You can run the background process using `async let`. When you leave the scope of the function your `async let` variable is declared the client will be shutdown.
 
 ```swift
 let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
 async let _ = stompClient.run()
-// use STOMP client
+
+// Use STOMP client
+try await stompClient.send("Hello, World!", to: "/queue/a")
+// Client continues running in background
 ```
 
-Or you can use `STOMPClient` with [`swift-service-lifecycle`](https://github.com/swift-server/swift-service-lifecycle).
+Alternatively you could also use a `TaskGroup`.
+
+```swift
+try await withThrowingTaskGroup { group in
+    group.addTask {
+        await stompClient.run()
+    }
+
+    // All operations happen in the closure body
+    try await stompClient.send("Hello, World!", to: "/queue/a")
+
+    // When done, cancel the run() task
+    group.cancelAll()
+}
+// Client is shut down when task group exits
+```
+
+Or you can use `STOMPClient` with [`swift-service-lifecycle`](https://github.com/swift-server/swift-service-lifecycle) for long-running services.
+
+```swift
+let services: [Service] = [myApp, stompClient]
+let serviceGroup = ServiceGroup(
+    services: services,
+    gracefulShutdownSignals: [.sigint, .sigterm],
+    logger: logger
+)
+try await serviceGroup.run()
+```
 
 Once you have a STOMP client setup and running you can send STOMP frames directly from the `STOMPClient`.
 
@@ -44,11 +82,9 @@ try await stompClient.send("Hello, STOMP over NIO!", to: "/queue/a")
 Or you can create a connection and subscribe to destinations from that connection using `STOMPClient.withConnection()`.
 
 ```swift
-try await stompClient.withConnection { connection in
-    try await connection.subscribe(to: "/queue/a") { subscription in
-        for try await frame in subscription {
-            print(String(buffer: frame.body))
-        }
+try await stompClient.subscribe(to: "/queue/a") { subscription in
+    for try await frame in subscription {
+        print(String(buffer: frame.body))
     }
 }
 ```
