@@ -57,13 +57,22 @@ extension STOMPConnectionConfiguration {
         let stompWebSocketConfig = stompConfig.scoped(to: "webSocket")
         let urlPath = stompWebSocketConfig.string(forKey: "urlPath")
         let maxFrameSize = stompWebSocketConfig.int(forKey: "maxFrameSize")
-        let initialRequestHeaders = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders", as: HTTPField.self)
+        let initialRequestHeaders: HTTPFields?
+        if let initialRequestHeadersArray = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders", as: HTTPField.self) {
+            var headers = HTTPFields()
+            for header in initialRequestHeadersArray {
+                headers.append(header)
+            }
+            initialRequestHeaders = headers
+        } else {
+            initialRequestHeaders = nil
+        }
         self.webSocket =
             if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {
                 .init(
                     urlPath: urlPath ?? "/ws",
                     maxFrameSize: maxFrameSize ?? 1 << 14,
-                    initialRequestHeaders: (try? HTTPFields(parsedTrailerFields: initialRequestHeaders ?? [])) ?? [:]
+                    initialRequestHeaders: initialRequestHeaders ?? [:]
                 )
             } else {
                 nil
