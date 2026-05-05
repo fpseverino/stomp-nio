@@ -1,5 +1,5 @@
 public import Configuration
-import NIOHTTP1
+import HTTPTypes
 
 extension STOMPClientConfiguration {
     /// Creates a new STOMP client configuration using values from the provided reader.
@@ -66,8 +66,15 @@ extension STOMPClientConfiguration {
         let stompWebSocketConfig = stompConfig.scoped(to: "webSocket")
         let urlPath = stompWebSocketConfig.string(forKey: "urlPath")
         let maxFrameSize = stompWebSocketConfig.int(forKey: "maxFrameSize")
-        let initialRequestHeaders = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders").flatMap {
-            HTTPHeaders(configStringArray: $0)
+        let initialRequestHeaders: HTTPFields?
+        if let initialRequestHeadersArray = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders", as: HTTPField.self) {
+            var headers = HTTPFields()
+            for header in initialRequestHeadersArray {
+                headers.append(header)
+            }
+            initialRequestHeaders = headers
+        } else {
+            initialRequestHeaders = nil
         }
         self.webSocket =
             if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {

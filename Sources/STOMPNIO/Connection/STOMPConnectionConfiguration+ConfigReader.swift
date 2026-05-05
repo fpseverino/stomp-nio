@@ -1,5 +1,5 @@
 public import Configuration
-import NIOHTTP1
+public import HTTPTypes
 
 extension STOMPConnectionConfiguration {
     /// Creates a new STOMP connection configuration using values from the provided reader.
@@ -57,8 +57,15 @@ extension STOMPConnectionConfiguration {
         let stompWebSocketConfig = stompConfig.scoped(to: "webSocket")
         let urlPath = stompWebSocketConfig.string(forKey: "urlPath")
         let maxFrameSize = stompWebSocketConfig.int(forKey: "maxFrameSize")
-        let initialRequestHeaders = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders").flatMap {
-            HTTPHeaders(configStringArray: $0)
+        let initialRequestHeaders: HTTPFields?
+        if let initialRequestHeadersArray = stompWebSocketConfig.stringArray(forKey: "initialRequestHeaders", as: HTTPField.self) {
+            var headers = HTTPFields()
+            for header in initialRequestHeadersArray {
+                headers.append(header)
+            }
+            initialRequestHeaders = headers
+        } else {
+            initialRequestHeaders = nil
         }
         self.webSocket =
             if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {
@@ -93,23 +100,21 @@ extension STOMPHeader: ExpressibleByConfigString {
     }
 }
 
-extension HTTPHeaders {
-    /// Creates HTTP headers from an array of configuration strings.
+extension HTTPField: @retroactive ExpressibleByConfigString {
+    /// Creates a HTTP header from a configuration string.
     ///
-    /// Each configuration string must be in the `<key>:<value>` format.
+    /// The configuration string must be in the `<key>:<value>` format.
     ///
-    /// - Parameter configStringArray: The array of configuration strings to create the HTTP headers from.
-    init?(configStringArray: [String]) {
-        var headers = HTTPHeaders()
-        for configString in configStringArray {
-            guard let colonIndex = configString.firstIndex(of: ":") else {
-                return nil
-            }
-            let name = String(configString[..<colonIndex].trimmingWhitespace())
-            let valueStartIndex = configString.index(after: colonIndex)
-            let value = String(configString[valueStartIndex...].trimmingWhitespace())
-            headers.add(name: name, value: value)
+    /// - Parameter configString: The configuration string to create the HTTP header from.
+    public init?(configString: String) {
+        guard let colonIndex = configString.firstIndex(of: ":") else {
+            return nil
         }
-        self = headers
+        guard let name = HTTPField.Name(String(configString[..<colonIndex].trimmingWhitespace())) else {
+            return nil
+        }
+        let valueStartIndex = configString.index(after: colonIndex)
+        let value = String(configString[valueStartIndex...].trimmingWhitespace())
+        self.init(name: name, value: value)
     }
 }
