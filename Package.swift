@@ -26,6 +26,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.4"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.8.0"),
         .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-http-types.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.22.0"),
     ],
     targets: [
         .target(
@@ -41,6 +43,8 @@ let package = Package(
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle", condition: .when(traits: ["ServiceLifecycle"])),
                 .product(name: "Configuration", package: "swift-configuration"),
+                .product(name: "HTTPTypes", package: "swift-http-types"),
+                .product(name: "NIOHTTPTypesHTTP1", package: "swift-nio-extras"),
             ],
             swiftSettings: swiftSettings
         ),

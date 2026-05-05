@@ -1,4 +1,4 @@
-public import NIOHTTP1
+public import HTTPTypes
 
 #if os(macOS) || os(Linux) || os(Android)
 public import NIOSSL
@@ -99,7 +99,7 @@ public struct STOMPConnectionConfiguration: Sendable {
         /// The maximum frame size the WebSocket client will allow.
         public var maxFrameSize: Int
         /// Additional headers to add to the initial HTTP request.
-        public var initialRequestHeaders: HTTPHeaders
+        public var initialRequestHeaders: HTTPFields
 
         /// Creates a new WebSocket configuration.
         ///
@@ -110,7 +110,7 @@ public struct STOMPConnectionConfiguration: Sendable {
         public init(
             urlPath: String = "/ws",
             maxFrameSize: Int = 1 << 14,
-            initialRequestHeaders: HTTPHeaders = [:]
+            initialRequestHeaders: HTTPFields = [:]
         ) {
             self.urlPath = urlPath
             self.maxFrameSize = maxFrameSize

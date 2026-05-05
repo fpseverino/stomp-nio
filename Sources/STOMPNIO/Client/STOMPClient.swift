@@ -166,7 +166,7 @@ extension STOMPClient {
     ///
     /// - Returns: Value returned by the closure.
     public func withConnection<Value>(
-        operation: (STOMPConnection) async throws -> sending Value
+        operation: (STOMPConnection) async throws -> Value
     ) async throws -> Value {
         let lease: ConnectionLease<STOMPConnection>
         do {

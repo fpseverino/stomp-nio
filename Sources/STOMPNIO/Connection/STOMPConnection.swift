@@ -1,6 +1,7 @@
 public import Logging
 public import NIOCore
 import NIOHTTP1
+import NIOHTTPTypesHTTP1
 public import NIOPosix
 import NIOWebSocket
 import Synchronization
@@ -71,8 +72,8 @@ public final actor STOMPConnection: Sendable {
         configuration: STOMPConnectionConfiguration = .init(),
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
         logger: Logger,
-        operation: (STOMPConnection) async throws -> sending Value
-    ) async throws -> sending Value {
+        operation: (STOMPConnection) async throws -> Value
+    ) async throws -> Value {
         let connection = try await self.connect(
             address: address,
             connectionID: 0,
@@ -390,7 +391,7 @@ public final actor STOMPConnection: Sendable {
         let httpHandler = STOMPWebSocketInitialRequestChannelHandler(
             host: hostHeader,
             urlPath: webSocketConfiguration.urlPath,
-            additionalHeaders: webSocketConfiguration.initialRequestHeaders,
+            additionalHeaders: .init(webSocketConfiguration.initialRequestHeaders),
             upgradePromise: promise
         )
 
