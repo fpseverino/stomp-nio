@@ -53,4 +53,15 @@ extension STOMPFrame {
         // Write NULL terminator
         buffer.writeInteger(UInt8(0))
     }
+
+    var size: Int {
+        var size = self.command.rawValue.utf8.count + 1  // Command + newline
+        for header in self.headers {
+            size += header.name.name.utf8.count + 1 + header.value.utf8.count + 1  // name:value\n
+        }
+        size += 1  // End of headers newline
+        size += self.body.readableBytes  // Body
+        size += 1  // NULL terminator
+        return size
+    }
 }

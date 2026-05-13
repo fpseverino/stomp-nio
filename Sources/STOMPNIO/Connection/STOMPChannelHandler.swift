@@ -169,7 +169,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
         let frame = self.unwrapOutboundIn(data)
         self.logger.trace("Sending STOMP message: \(frame.command.rawValue)")
-        var buffer = context.channel.allocator.buffer(capacity: 128)
+        var buffer = context.channel.allocator.buffer(capacity: frame.size)
         frame.encode(into: &buffer)
         context.write(self.wrapOutboundOut(buffer), promise: promise)
         self.lastHeartBeatTime = .now()
