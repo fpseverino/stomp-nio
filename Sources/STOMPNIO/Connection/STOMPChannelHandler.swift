@@ -305,7 +305,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     func triggerGracefulShutdown() {
         switch self.stateMachine.triggerGracefulShutdown() {
         case .closeConnection(let context):
-            context.close(mode: .all, promise: nil)
+            context.close(mode: .output, promise: nil)
         case .doNothing:
             break
         }
