@@ -340,7 +340,7 @@ struct STOMPConnectionTests {
             ) { connection in
                 await withThrowingTaskGroup { group in
                     group.addTask {
-                        await #expect(throws: STOMPClientError.cancelledTask) {
+                        await #expect(throws: STOMPClientError.cancelled) {
                             try await connection.subscribe(to: "/queue/cancellation") { subscription in
                                 for try await _ in subscription {
                                     Issue.record("Should not receive messages")
@@ -363,7 +363,7 @@ struct STOMPConnectionTests {
                 await withThrowingTaskGroup(of: Void.self) { group in
                     group.cancelAll()
                     group.addTask {
-                        await #expect(throws: STOMPClientError.cancelledTask) {
+                        await #expect(throws: STOMPClientError.cancelled) {
                             try await connection.subscribe(to: "/queue/already-cancelled") { subscription in
                                 for try await _ in subscription {
                                     Issue.record("Should not receive messages")
@@ -389,7 +389,7 @@ struct STOMPConnectionTests {
                 }
                 try await withThrowingTaskGroup { group in
                     group.addTask {
-                        await #expect(throws: STOMPClientError.cancelledTask) {
+                        await #expect(throws: STOMPClientError.cancelled) {
                             try await connection.send(ByteBuffer(), to: "foo", contentType: "application/octet-stream")
                         }
                     }

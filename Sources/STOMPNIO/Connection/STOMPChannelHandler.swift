@@ -198,7 +198,7 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
         self.eventLoop.assertInEventLoop()
         switch self.stateMachine.cancel(requestID: requestID) {
         case .failTask(let cancelledTask):
-            cancelledTask.promise.fail(STOMPClientError.cancelledTask)
+            cancelledTask.promise.fail(STOMPClientError.cancelled)
         case .doNothing:
             break
         }

@@ -51,7 +51,7 @@ extension STOMPConnection {
     ) async throws -> (UInt, STOMPSubscription) {
         let (stream, streamContinuation) = STOMPSubscription.makeStream()
         if Task.isCancelled {
-            throw STOMPClientError.cancelledTask
+            throw STOMPClientError.cancelled
         }
         let subscriptionID: UInt = try await withCheckedThrowingContinuation(isolation: self) { continuation in
             self.channelHandler.subscribe(

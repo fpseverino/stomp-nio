@@ -174,7 +174,7 @@ extension STOMPClient {
         } catch let error as ConnectionPoolError {
             switch error {
             case .requestCancelled:
-                throw STOMPClientError.cancelledTask
+                throw STOMPClientError.cancelled
             case .poolShutdown:
                 throw STOMPClientError.clientIsShutDown
             case .connectionCreationCircuitBreakerTripped:
