@@ -91,7 +91,7 @@ public final actor STOMPConnection: Sendable {
         else {
             return
         }
-        self.channel.close(mode: .output, promise: nil)
+        self.channel.close(mode: .all, promise: nil)
     }
 
     /// Send a STOMP frame to the server.
