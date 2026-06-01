@@ -73,7 +73,7 @@ struct STOMPNIOCoreTests {
     }
 
     @Test("WebSocket Initial Request")
-    func webSocketInitialRequest() throws {
+    func webSocketInitialRequest() async throws {
         let el = EmbeddedEventLoop()
         defer { #expect(throws: Never.self) { try el.syncShutdownGracefully() } }
         let promise = el.makePromise(of: Void.self)
@@ -84,9 +84,8 @@ struct STOMPNIOCoreTests {
             upgradePromise: promise
         )
         let channel = EmbeddedChannel(handler: initialRequestHandler, loop: el)
-        try channel.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 0)).wait()
+        try await channel.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 0)).get()
         let requestHead = try channel.readOutbound(as: HTTPClientRequestPart.self)
-        let requestBody = try channel.readOutbound(as: HTTPClientRequestPart.self)
         let requestEnd = try channel.readOutbound(as: HTTPClientRequestPart.self)
         switch requestHead {
         case .head(let head):
@@ -97,12 +96,6 @@ struct STOMPNIOCoreTests {
         default:
             Issue.record("Unexpected request head: \(String(describing: requestHead))")
         }
-        switch requestBody {
-        case .body(let data):
-            #expect(data == .byteBuffer(ByteBuffer()))
-        default:
-            Issue.record("Unexpected request body: \(String(describing: requestBody))")
-        }
         switch requestEnd {
         case .end(nil):
             break
@@ -110,7 +103,11 @@ struct STOMPNIOCoreTests {
             Issue.record("Unexpected request end: \(String(describing: requestEnd))")
         }
         _ = try channel.finish()
-        promise.succeed(())
+        // if the channel is made inactive while the `STOMPWebSocketInitialRequestChannelHandler` is in the pipeline
+        // it should pass an error to the upgrade promise
+        await #expect(throws: ChannelError.ioOnClosedChannel) {
+            try await promise.futureResult.get()
+        }
     }
 }
 
