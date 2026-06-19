@@ -2,9 +2,9 @@
 @usableFromInline
 struct Max2Sequence<Element>: Sequence {
     @usableFromInline
-    private(set) var first: Element?
+    var first: Element?
     @usableFromInline
-    private(set) var second: Element?
+    var second: Element?
 
     @inlinable
     var count: Int {
@@ -48,7 +48,7 @@ struct Max2Sequence<Element>: Sequence {
         let second: Element?
 
         @usableFromInline
-        private(set) var index: UInt8 = 0
+        var index: UInt8 = 0
 
         @inlinable
         init(first: Element?, second: Element?) {

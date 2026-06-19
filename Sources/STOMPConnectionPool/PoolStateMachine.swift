@@ -13,13 +13,13 @@ import Bionic
 struct PoolConfiguration: Sendable {
     /// The minimum number of connections to preserve in the pool.
     ///
-    /// If the pool is mostly idle and the remote servers closes idle connections,
+    /// If the pool is mostly idle and the remote server closes idle connections,
     /// the `ConnectionPool` will initiate new outbound connections proactively
     /// to avoid the number of available connections dropping below this number.
     @usableFromInline
     var minimumConnectionCount: Int = 0
 
-    /// The maximum number of connections to for this pool, to be preserved.
+    /// The maximum number of connections for this pool to be preserved.
     @usableFromInline
     var maximumConnectionSoftLimit: Int = 10
 
@@ -28,6 +28,9 @@ struct PoolConfiguration: Sendable {
 
     @usableFromInline
     var keepAliveDuration: Duration?
+
+    @usableFromInline
+    var keepAliveReducesAvailableStreams: Bool = true
 
     @usableFromInline
     var circuitBreakerTripAfter: Duration = .seconds(15)
@@ -231,17 +234,17 @@ where
     @usableFromInline let generator: ConnectionIDGenerator
 
     @usableFromInline
-    private(set) var connections: ConnectionGroup
+    var connections: ConnectionGroup
     @usableFromInline
-    private(set) var requestQueue: RequestQueue
+    var requestQueue: RequestQueue
     @usableFromInline
-    private(set) var poolState: PoolState = .running
+    var poolState: PoolState = .running
     @usableFromInline
-    private(set) var gracefulShutdownTriggered: Bool = false
+    var gracefulShutdownTriggered: Bool = false
     @usableFromInline
     let clock: Clock
     @usableFromInline
-    private(set) var cacheNoMoreConnectionsAllowed: Bool = false
+    var cacheNoMoreConnectionsAllowed: Bool = false
 
     @inlinable
     init(
@@ -258,7 +261,7 @@ where
             maximumConcurrentConnectionSoftLimit: configuration.maximumConnectionSoftLimit,
             maximumConcurrentConnectionHardLimit: configuration.maximumConnectionHardLimit,
             keepAlive: configuration.keepAliveDuration != nil,
-            keepAliveReducesAvailableStreams: true
+            keepAliveReducesAvailableStreams: configuration.keepAliveReducesAvailableStreams
         )
         self.clock = clock
         self.requestQueue = RequestQueue()
@@ -351,10 +354,15 @@ where
 
     @inlinable
     mutating func releaseConnection(_ connection: Connection, streams: UInt16) -> Action {
-        guard let (index, context) = self.connections.releaseConnection(connection.id, streams: streams) else {
+        switch self.connections.releaseConnection(connection.id, streams: streams) {
+        case .available(let index, let context):
+            return self.handleAvailableConnection(index: index, availableContext: context)
+        case .closeConnection(let closeAction):
+            self.cacheNoMoreConnectionsAllowed = false
+            return .init(request: .none, connection: .closeConnection(closeAction.connection, closeAction.timersToCancel))
+        case .none:
             return .none()
         }
-        return self.handleAvailableConnection(index: index, availableContext: context)
     }
 
     mutating func cancelRequest(id: RequestID) -> Action {
@@ -567,22 +575,29 @@ where
     @inlinable
     mutating func connectionKeepAliveTimerTriggered(_ connectionID: ConnectionID) -> Action {
         precondition(self.configuration.keepAliveDuration != nil)
-        precondition(self.requestQueue.isEmpty)
+        // Removed: precondition(self.requestQueue.isEmpty)
+        // A lease request may have been queued after this keep-alive timer was scheduled
+        // (e.g. PG restart caused connections to close while new requests arrived).
+        // This mirrors the fix in connectionIdleTimerTriggered (PR #627).
 
         guard let keepAliveAction = self.connections.keepAliveIfIdle(connectionID) else {
             return .none()
         }
-        return .init(
-            request: .none, connection: .runKeepAlive(keepAliveAction.connection, keepAliveAction.keepAliveTimerCancellationContinuation))
+        return .init(request: .none, connection: .runKeepAlive(keepAliveAction.connection, keepAliveAction.keepAliveTimerCancellationContinuation))
     }
 
     @inlinable
     mutating func connectionKeepAliveDone(_ connection: Connection) -> Action {
         precondition(self.configuration.keepAliveDuration != nil)
-        guard let (index, context) = self.connections.keepAliveSucceeded(connection.id) else {
+        switch self.connections.keepAliveSucceeded(connection.id) {
+        case .available(let index, let context):
+            return self.handleAvailableConnection(index: index, availableContext: context)
+        case .closeConnection(let closeAction):
+            self.cacheNoMoreConnectionsAllowed = false
+            return .init(request: .none, connection: .closeConnection(closeAction.connection, closeAction.timersToCancel))
+        case .none:
             return .none()
         }
-        return self.handleAvailableConnection(index: index, availableContext: context)
     }
 
     @inlinable
@@ -595,8 +610,49 @@ where
     }
 
     @inlinable
+    mutating func connectionWillClose(_ connectionID: ConnectionID) -> Action {
+        self.cacheNoMoreConnectionsAllowed = false
+        switch self.connections.connectionWillClose(connectionID) {
+        case .closeConnection(let closeAction):
+            return .init(request: .none, connection: .closeConnection(closeAction.connection, closeAction.timersToCancel))
+        case .none:
+            return .none()
+        }
+    }
+
+    @inlinable
     mutating func connectionIdleTimerTriggered(_ connectionID: ConnectionID) -> Action {
-        precondition(self.requestQueue.isEmpty)
+        guard self.requestQueue.isEmpty else {
+            // We run into this case, if the following things happen in order:
+            //   1. this connection is starting a keep alive
+            //   2. a lease request is added to the queue that can not be served immediately
+            //   3. this idle timeout timer triggers, while the connection is still running the keep alive
+            //
+            // If this is the case we just recreate the idle timeout. After the keep alive is done, this connection
+            // might pickup the lease request (which would cancel the idle timeout) or the lease request might
+            // already be handled by another (currently busy connection), in which case the idle timeout can
+            // trigger eventually.
+            guard let (newTimer, oldCancellationToken) = self.connections.rescheduleIdleTimer(connectionID) else {
+                return .none()
+            }
+            let scheduledTimers = Max2Sequence(self.mapTimers(newTimer))
+            // We must propagate the old idle timer's cancellation continuation so that the
+            // `ConnectionPool.runTimer` child task that stored it can be resumed. Dropping it here
+            // produces a "SWIFT TASK CONTINUATION MISUSE: runTimer(_:in:) leaked its continuation
+            // without resuming it" runtime warning (the stored `CheckedContinuation` is never
+            // resumed and eventually deallocated).
+            if let oldCancellationToken {
+                return .init(
+                    request: .none,
+                    connection: .makeConnectionsCancelAndScheduleTimers(
+                        .init(),
+                        .init(element: oldCancellationToken),
+                        scheduledTimers
+                    )
+                )
+            }
+            return .init(request: .none, connection: .scheduleTimers(scheduledTimers))
+        }
 
         guard let closeAction = self.connections.closeConnectionIfIdle(connectionID) else {
             return .none()
@@ -817,7 +873,7 @@ where
 extension PoolStateMachine {
     /// Calculates the delay for the next connection attempt after the given number of failed `attempts`.
     ///
-    /// Our backoff formula is: 100ms * 1.25^(attempts - 1) with 3% jitter that is capped of at 1 minute.
+    /// Our backoff formula is: 100ms * 1.25^(attempts - 1) with 3% jitter that is capped off at 1 minute.
     /// This means for:
     ///   -  1 failed attempt :  100ms
     ///   -  5 failed attempts: ~300ms
@@ -828,10 +884,10 @@ extension PoolStateMachine {
     ///   - 29 failed attempts: ~60s (max out)
     ///
     /// - Parameter attempts: number of failed attempts in a row
-    /// - Returns: time to wait until trying to establishing a new connection
+    /// - Returns: time to wait until trying to establish a new connection
     @usableFromInline
     static func calculateBackoff(failedAttempt attempts: Int) -> Duration {
-        // Our backoff formula is: 100ms * 1.25^(attempts - 1) that is capped of at 1minute
+        // Our backoff formula is: 100ms * 1.25^(attempts - 1) that is capped off at 1 minute
         // This means for:
         //   -  1 failed attempt :  100ms
         //   -  5 failed attempts: ~300ms
