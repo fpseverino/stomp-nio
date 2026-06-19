@@ -1,6 +1,10 @@
 public import Configuration
 import HTTPTypes
 
+#if os(macOS) || os(Linux) || os(Android)
+import NIOSSL
+#endif
+
 extension STOMPClientConfiguration {
     /// Creates a new STOMP client configuration using values from the provided reader.
     ///
@@ -19,11 +23,21 @@ extension STOMPClientConfiguration {
     /// - `connectTimeout` (int, optional, default: `10`): Maximum time to wait for the `CONNECTED` frame, in seconds.
     /// - `receiptTimeout` (int, optional, default: `30`): Maximum time to wait for a `RECEIPT` frame, in seconds.
     /// - `connectHeaders` (string array, optional): Additional user defined headers to include in the `CONNECT` frame, in the `<key>:<value>` format.
+    /// ### TLS configuration keys
+    /// - `tls.serverName` (string, optional): Optional server name for SNI (Server Name Indication). Valid for both `NIOSSL` and `NIOTransportServices`.
+    /// ### NIOTransportServices specific configuration keys (takes precedence over NIOSSL if available)
+    /// - `tls.niots.serverName` (string, optional): Name alias for `tls.serverName`. If both `tls.serverName` and `tls.niots.serverName` are provided, the value from `tls.serverName` will be used.
+    /// - `tls.niots.privateKey` (string): TLS private key as a file path to a `.p12` file for NIOTransportServices.
+    /// - `tls.niots.privateKeyPassword` (string): Password for the TLS private key. Only applicable for NIOTransportServices.
+    /// - `tls.niots.trustRoots` (string, optional): TLS trust roots as a file path to a `.der` file for NIOTransportServices.
+    /// ### NIOSSL specific configuration keys (used as fallback)
+    /// - `tls.certificateChain` (string): TLS certificate chain in PEM format. Only applicable for `NIOSSL`.
+    /// - `tls.privateKey` (string): TLS private key, in PEM format for NIOSSL.
+    /// - `tls.trustRoots` (string, optional): TLS trust roots, in PEM format for NIOSSL.
+    /// ### WebSocket specific configuration keys
     /// - `webSocket.urlPath` (string, optional): The URL path to use when establishing the WebSocket connection.
     /// - `webSocket.maxFrameSize` (int, optional): The maximum frame size for the WebSocket connection.
     /// - `webSocket.initialRequestHeaders` (string array, optional): Initial HTTP headers to include in the WebSocket handshake request.
-    ///
-    /// > Note: TLS configuration is not read from the `ConfigReader` and is disabled by default. You must set the `tls` property manually after initialization.
     ///
     /// - Parameter config: The config reader to read configuration values from.
     public init(config: ConfigReader) {
@@ -54,10 +68,9 @@ extension STOMPClientConfiguration {
                 [:]
             }
 
-        self.webSocket = .init(config: config)
+        self.tls = (try? .init(config: config.scoped(to: "tls"))) ?? .disable
 
-        // TLS is disabled by default
-        self.tls = .disable
+        self.webSocket = .init(config: config.scoped(to: "webSocket"))
     }
 }
 
@@ -74,21 +87,74 @@ extension STOMPClientConfiguration.ConnectionPool {
     }
 }
 
+extension STOMPClientConfiguration.TLS {
+    private enum _TLSConfigError: Error {
+        case missingConfiguration
+    }
+
+    /// Creates a new TLS configuration using values from the provided reader.
+    ///
+    /// If the `niots` scoped configuration is present, and NIOTransportServices is available, it will be used as it takes precedence over the `NIOSSL` configuration.
+    /// Otherwise, the `NIOSSL` configuration will be used.
+    ///
+    /// ## Configuration keys
+    /// - `serverName` (string, optional): Optional server name for SNI (Server Name Indication). Valid for both `NIOSSL` and `NIOTransportServices`.
+    /// ### NIOTransportServices specific configuration keys
+    /// - `niots.serverName` (string, optional): Name alias for `serverName`. If both `serverName` and `niots.serverName` are provided, the value from `serverName` will be used.
+    /// - `niots.privateKey` (string): TLS private key as a file path to a `.p12` file for NIOTransportServices.
+    /// - `niots.privateKeyPassword` (string): Password for the TLS private key. Only applicable for NIOTransportServices.
+    /// - `niots.trustRoots` (string, optional): TLS trust roots as a file path to a `.der` file for NIOTransportServices.
+    /// ### NIOSSL specific configuration keys (used as fallback)
+    /// - `certificateChain` (string): TLS certificate chain in PEM format. Only applicable for `NIOSSL`.
+    /// - `privateKey` (string): TLS private key, in PEM format for NIOSSL.
+    /// - `trustRoots` (string, optional): TLS trust roots, in PEM format for NIOSSL.
+    ///
+    /// - Parameter config: The config reader to read configuration values from.
+    ///
+    /// - Throws: An internal error type if no compatible TLS configuration is found in the provided reader.
+    init(config: ConfigReader) throws {
+        let tlsServerName = config.string(forKey: "serverName")
+        #if canImport(Network)
+        let nioTSConfigReader = config.scoped(to: "niots")
+        if let tsTLSConfiguration = try? TSTLSConfiguration(config: nioTSConfigReader) {
+            self.base = .enable(.ts(tsTLSConfiguration), tlsServerName: tlsServerName ?? nioTSConfigReader.string(forKey: "serverName"))
+            return
+        }
+        #endif
+        #if os(macOS) || os(Linux) || os(Android)
+        let privateKey = try config.requiredString(forKey: "privateKey")
+        let trustRoots = config.string(forKey: "trustRoots")
+        let certificateChainPEM = try config.requiredString(forKey: "certificateChain")
+        let certificateChain = try NIOSSLCertificate.fromPEMBytes([UInt8](certificateChainPEM.utf8))
+        let nioSSLPrivateKey = try NIOSSLPrivateKey(bytes: [UInt8](privateKey.utf8), format: .pem)
+        let nioSSLTrustRoots = try trustRoots.map { try NIOSSLCertificate.fromPEMBytes([UInt8]($0.utf8)) }
+        var tlsConfiguration = TLSConfiguration.makeServerConfiguration(
+            certificateChain: certificateChain.map { .certificate($0) },
+            privateKey: .privateKey(nioSSLPrivateKey)
+        )
+        tlsConfiguration.trustRoots = nioSSLTrustRoots.map { .certificates($0) }
+        self.base = .enable(.niossl(tlsConfiguration), tlsServerName: tlsServerName)
+        return
+        #else
+        throw _TLSConfigError.missingConfiguration
+        #endif
+    }
+}
+
 extension STOMPClientConfiguration.WebSocket {
     /// Creates a new WebSocket configuration using values from the provided reader.
     ///
     /// ## Configuration keys
-    /// - `webSocket.urlPath` (string, optional): The URL path to use when establishing the WebSocket connection.
-    /// - `webSocket.maxFrameSize` (int, optional): The maximum frame size for the WebSocket connection.
-    /// - `webSocket.initialRequestHeaders` (string array, optional): Initial HTTP headers to include in the WebSocket handshake request.
+    /// - `urlPath` (string, optional): The URL path to use when establishing the WebSocket connection.
+    /// - `maxFrameSize` (int, optional): The maximum frame size for the WebSocket connection.
+    /// - `initialRequestHeaders` (string array, optional): Initial HTTP headers to include in the WebSocket handshake request.
     ///
     /// - Parameter config: The config reader to read configuration values from.
     init?(config: ConfigReader) {
-        let webSocketConfig = config.scoped(to: "webSocket")
-        let urlPath = webSocketConfig.string(forKey: "urlPath")
-        let maxFrameSize = webSocketConfig.int(forKey: "maxFrameSize")
+        let urlPath = config.string(forKey: "urlPath")
+        let maxFrameSize = config.int(forKey: "maxFrameSize")
         let initialRequestHeaders: HTTPFields?
-        if let initialRequestHeadersArray = webSocketConfig.stringArray(forKey: "initialRequestHeaders", as: ConfigHTTPField.self) {
+        if let initialRequestHeadersArray = config.stringArray(forKey: "initialRequestHeaders", as: ConfigHTTPField.self) {
             var headers = HTTPFields()
             for header in initialRequestHeadersArray {
                 headers.append(.init(name: header.name, value: header.value))

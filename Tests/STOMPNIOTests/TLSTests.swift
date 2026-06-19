@@ -1,3 +1,4 @@
+import Configuration
 import Logging
 import NIOCore
 import NIOPosix
@@ -75,6 +76,28 @@ struct TLSTests {
                 logger: self.logger
             ) { connection in
                 try await connection.send("Test", to: "/queue/tls-p12")
+            }
+        }
+
+        @Test("Connect with NIOTransportServices from ConfigReader")
+        func tlsConnectWithConfigReader() async throws {
+            let configReader = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "tls.niots.trustRoots": .init(stringLiteral: TLSTests.rootPath + "/Certs/ca.der"),
+                        "tls.niots.privateKey": .init(stringLiteral: TLSTests.rootPath + "/Certs/client.p12"),
+                        "tls.niots.privateKeyPassword": "STOMPNIOClientCertPassword",
+                        "tls.niots.serverName": "fpseverino.com",
+                    ]
+                )
+            )
+            try await STOMPConnection.withConnection(
+                address: .hostname(TLSTests.hostname, port: 61614),
+                configuration: .init(config: configReader),
+                eventLoop: TLSTests.eventLoopGroupSingleton.any(),
+                logger: self.logger
+            ) { connection in
+                try await connection.send("Test", to: "/queue/tls-config")
             }
         }
         #endif
@@ -177,6 +200,28 @@ struct TLSTests {
             )
             async let _ = client.run()
             try await client.send("Test", to: "/queue/client-tls-p12")
+        }
+
+        @Test("Connect with NIOTransportServices from ConfigReader")
+        func tlsConnectWithConfigReader() async throws {
+            let configReader = ConfigReader(
+                provider: InMemoryProvider(
+                    values: [
+                        "tls.niots.trustRoots": .init(stringLiteral: TLSTests.rootPath + "/Certs/ca.der"),
+                        "tls.niots.privateKey": .init(stringLiteral: TLSTests.rootPath + "/Certs/client.p12"),
+                        "tls.niots.privateKeyPassword": "STOMPNIOClientCertPassword",
+                        "tls.niots.serverName": "fpseverino.com",
+                    ]
+                )
+            )
+            let client = STOMPClient(
+                .hostname(TLSTests.hostname, port: 61614),
+                configuration: .init(config: configReader),
+                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any(),
+                logger: self.logger
+            )
+            async let _ = client.run()
+            try await client.send("Test", to: "/queue/client-tls-config")
         }
         #endif
 

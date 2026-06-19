@@ -30,7 +30,7 @@ public struct STOMPClientConfiguration: Sendable {
         }
         enum Base {
             case disable
-            case enable(Configuration, String?)
+            case enable(Configuration, tlsServerName: String?)
         }
         let base: Base
 
@@ -46,7 +46,7 @@ public struct STOMPClientConfiguration: Sendable {
         ///   - tlsServerName: Optional server name for SNI (Server Name Indication)
         /// - Returns: A configured TLS instance
         public static func enable(_ configuration: Configuration, tlsServerName: String?) -> Self {
-            .init(base: .enable(configuration, tlsServerName))
+            .init(base: .enable(configuration, tlsServerName: tlsServerName))
         }
     }
 
