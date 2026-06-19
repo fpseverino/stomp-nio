@@ -172,8 +172,8 @@ struct STOMPClientTests {
             let config = ConfigReader(
                 provider: InMemoryProvider(
                     values: [
-                        "stomp.auth.login": "guest",
-                        "stomp.auth.passcode": "guest",
+                        "stomp.login": "guest",
+                        "stomp.passcode": "guest",
                         "stomp.virtualHost": "/",
                         "stomp.heartBeat.outgoing": 1000,
                         "stomp.heartBeat.incoming": 1000,
@@ -193,7 +193,7 @@ struct STOMPClientTests {
 
             let client = STOMPClient(
                 .hostname(STOMPConnectionTests.hostname, port: 15674),
-                configuration: .init(config: config),
+                configuration: .init(config: config.scoped(to: "stomp")),
                 logger: self.logger
             )
             async let _ = client.run()
@@ -207,7 +207,7 @@ struct STOMPClientTests {
             let config = ConfigReader(
                 provider: InMemoryProvider(
                     values: [
-                        "stomp.auth.login": "guest",
+                        "stomp.login": "guest",
                         "stomp.virtualHost": "/",
                         "stomp.heartBeat.outgoing": 1000,
                         "stomp.connectTimeout": 15,
@@ -222,7 +222,7 @@ struct STOMPClientTests {
 
             let client = STOMPClient(
                 .hostname(STOMPConnectionTests.hostname),
-                configuration: .init(config: config),
+                configuration: .init(config: config.scoped(to: "stomp")),
                 logger: self.logger
             )
             async let _ = client.run()

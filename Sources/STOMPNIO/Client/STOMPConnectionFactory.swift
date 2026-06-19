@@ -83,9 +83,8 @@ final class STOMPConnectionFactory: Sendable {
             }
 
         return STOMPConnectionConfiguration(
-            authentication: self.configuration.authentication.flatMap {
-                .init(login: $0.login, passcode: $0.passcode)
-            },
+            login: self.configuration.login,
+            passcode: self.configuration.passcode,
             virtualHost: self.configuration.virtualHost,
             heartBeat: (outgoing: self.configuration.heartBeat.outgoing, incoming: self.configuration.heartBeat.incoming),
             connectTimeout: self.configuration.connectTimeout,

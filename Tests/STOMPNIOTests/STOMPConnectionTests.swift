@@ -126,9 +126,7 @@ struct STOMPConnectionTests {
         await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
             try await STOMPConnection.withConnection(
                 address: .hostname(Self.hostname),
-                configuration: .init(
-                    authentication: .init(login: "wrong-user", passcode: "wrong-pass")
-                ),
+                configuration: .init(login: "wrong-user", passcode: "wrong-pass"),
                 logger: self.logger
             ) { _ in }
         }
@@ -266,8 +264,8 @@ struct STOMPConnectionTests {
             let config = ConfigReader(
                 provider: InMemoryProvider(
                     values: [
-                        "stomp.auth.login": "guest",
-                        "stomp.auth.passcode": "guest",
+                        "stomp.login": "guest",
+                        "stomp.passcode": "guest",
                         "stomp.virtualHost": "/",
                         "stomp.heartBeat.outgoing": 1000,
                         "stomp.heartBeat.incoming": 1000,
@@ -287,7 +285,7 @@ struct STOMPConnectionTests {
 
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: 15674),
-                configuration: .init(config: config),
+                configuration: .init(config: config.scoped(to: "stomp")),
                 logger: self.logger
             ) { connection in
                 try await Task.sleep(for: .seconds(5))
@@ -300,7 +298,7 @@ struct STOMPConnectionTests {
             let config = ConfigReader(
                 provider: InMemoryProvider(
                     values: [
-                        "stomp.auth.login": "guest",
+                        "stomp.login": "guest",
                         "stomp.virtualHost": "/",
                         "stomp.heartBeat.outgoing": 1000,
                         "stomp.connectTimeout": 15,
@@ -315,7 +313,7 @@ struct STOMPConnectionTests {
 
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname),
-                configuration: .init(config: config),
+                configuration: .init(config: config.scoped(to: "stomp")),
                 logger: self.logger
             ) { connection in
                 try await connection.send("Test", to: "/queue/config-reader")

@@ -12,7 +12,9 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
     @usableFromInline
     struct Configuration {
         @usableFromInline
-        let authentication: STOMPConnectionConfiguration.Authentication?
+        let login: String?
+        @usableFromInline
+        let passcode: String?
         @usableFromInline
         let virtualHost: String?
         @usableFromInline
@@ -98,9 +100,11 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
                 .acceptVersion: "1.0,1.1,1.2",
                 .heartBeat: "\(outgoingHeartBeat),\(incomingHeartBeat)",
             ]
-        if let authentication = self.configuration.authentication {
-            headers.append(.init(name: .login, value: authentication.login))
-            headers.append(.init(name: .passcode, value: authentication.passcode))
+        if let login = self.configuration.login {
+            headers.append(.init(name: .login, value: login))
+        }
+        if let passcode = self.configuration.passcode {
+            headers.append(.init(name: .passcode, value: passcode))
         }
         if let virtualHost = self.configuration.virtualHost {
             headers.append(.init(name: .host, value: virtualHost))
@@ -479,7 +483,8 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
 extension STOMPChannelHandler.Configuration {
     init(_ other: STOMPConnectionConfiguration) {
         self.init(
-            authentication: other.authentication,
+            login: other.login,
+            passcode: other.passcode,
             virtualHost: other.virtualHost,
             heartBeat: (
                 outgoing: .init(other.heartBeat.outgoing),

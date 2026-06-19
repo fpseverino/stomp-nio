@@ -71,27 +71,6 @@ public struct STOMPConnectionConfiguration: Sendable {
         }
     }
 
-    /// Authentication credentials for accessing a STOMP server.
-    ///
-    /// Use this structure to provide user ID and password credentials
-    /// when the server requires authentication for access.
-    public struct Authentication: Sendable {
-        /// The user identifier used to authenticate against a secured STOMP server.
-        public var login: String
-        /// The password used to authenticate against a secured STOMP server.
-        public var passcode: String
-
-        /// Creates a new authentication configuration.
-        ///
-        /// - Parameters:
-        ///   - login: The user identifier used to authenticate against a secured STOMP server.
-        ///   - passcode: The password used to authenticate against a secured STOMP server.
-        public init(login: String, passcode: String) {
-            self.login = login
-            self.passcode = passcode
-        }
-    }
-
     /// WebSocket configuration for the STOMP connection.
     public struct WebSocket: Sendable {
         /// WebSocket URL.
@@ -118,10 +97,11 @@ public struct STOMPConnectionConfiguration: Sendable {
         }
     }
 
-    /// Optional authentication credentials for accessing the STOMP server.
-    ///
-    /// Set this property when connecting to a server that requires authentication.
-    public var authentication: Authentication?
+    /// The user identifier used to authenticate against a secured STOMP server.
+    public var login: String?
+
+    /// The password used to authenticate against a secured STOMP server.
+    public var passcode: String?
 
     /// TLS configuration for the connection.
     ///
@@ -176,7 +156,8 @@ public struct STOMPConnectionConfiguration: Sendable {
     /// that can be used to establish a connection to a STOMP server with the specified parameters.
     ///
     /// - Parameters:
-    ///   - authentication: Optional credentials for accessing the STOMP server. Set to `nil` for unauthenticated access.
+    ///   - login: Optional user identifier for accessing the STOMP server. Set to `nil` for unauthenticated access.
+    ///   - passcode: Optional password for accessing the STOMP server. Set to `nil` for unauthenticated access.
     ///   - virtualHost: The name of a virtual host that the client wishes to connect to.
     ///   - heartBeat: The heart-beating configuration for the STOMP connection. Defaults to no heart-beating.
     ///   - connectTimeout: Maximum time to wait for the `CONNECTED` frame. Defaults to 10 seconds.
@@ -185,7 +166,8 @@ public struct STOMPConnectionConfiguration: Sendable {
     ///   - connectHeaders: Additional user defined headers to include in the `CONNECT` frame.
     ///   - webSocket: WebSocket configuration for the STOMP connection. Defaults to `nil` for non-WebSocket connections.
     public init(
-        authentication: Authentication? = nil,
+        login: String? = nil,
+        passcode: String? = nil,
         virtualHost: String? = nil,
         heartBeat: (outgoing: Duration, incoming: Duration) = (outgoing: .milliseconds(0), incoming: .milliseconds(0)),
         connectTimeout: Duration = .seconds(10),
@@ -194,7 +176,8 @@ public struct STOMPConnectionConfiguration: Sendable {
         connectHeaders: STOMPHeaders = [:],
         webSocket: WebSocket? = nil
     ) {
-        self.authentication = authentication
+        self.login = login
+        self.passcode = passcode
         self.virtualHost = virtualHost
         self.heartBeat = heartBeat
         self.connectTimeout = connectTimeout
