@@ -153,16 +153,12 @@ extension STOMPClientConfiguration.WebSocket {
     init?(config: ConfigReader) {
         let urlPath = config.string(forKey: "urlPath")
         let maxFrameSize = config.int(forKey: "maxFrameSize")
-        let initialRequestHeaders: HTTPFields?
-        if let initialRequestHeadersArray = config.stringArray(forKey: "initialRequestHeaders", as: ConfigHTTPField.self) {
-            var headers = HTTPFields()
-            for header in initialRequestHeadersArray {
-                headers.append(.init(name: header.name, value: header.value))
+        let initialRequestHeaders: HTTPFields? =
+            if let initialRequestHeadersArray = config.stringArray(forKey: "initialRequestHeaders", as: ConfigHTTPField.self) {
+                HTTPFields(initialRequestHeadersArray.lazy.map { $0.field })
+            } else {
+                nil
             }
-            initialRequestHeaders = headers
-        } else {
-            initialRequestHeaders = nil
-        }
 
         if urlPath != nil || maxFrameSize != nil || initialRequestHeaders != nil {
             self.init(
