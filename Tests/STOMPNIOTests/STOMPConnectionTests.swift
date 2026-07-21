@@ -16,7 +16,7 @@ import Foundation
 import NIOTransportServices
 #endif
 
-@Suite("STOMPConnection Tests")
+@Suite("STOMPConnection Tests", .defaultLogger(logLevel: .trace))
 struct STOMPConnectionTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
@@ -26,8 +26,7 @@ struct STOMPConnectionTests {
             group.addTask {
                 try await STOMPConnection.withConnection(
                     address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-                    configuration: .init(webSocket: webSocket),
-                    logger: self.subscriberLogger
+                    configuration: .init(webSocket: webSocket)
                 ) { connection in
                     try await connection.subscribe(
                         to: "/queue/stomp-nio-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
@@ -44,8 +43,7 @@ struct STOMPConnectionTests {
             group.addTask {
                 try await STOMPConnection.withConnection(
                     address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-                    configuration: .init(webSocket: webSocket),
-                    logger: self.publisherLogger
+                    configuration: .init(webSocket: webSocket)
                 ) { connection in
                     try await connection.send(
                         "Hello, STOMP over NIO!",
@@ -70,8 +68,7 @@ struct STOMPConnectionTests {
             group.addTask {
                 try await STOMPConnection.withConnection(
                     address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-                    configuration: .init(webSocket: webSocket),
-                    logger: self.subscriberLogger
+                    configuration: .init(webSocket: webSocket)
                 ) { connection in
                     try await connection.subscribe(
                         to: "/queue/large-payload-\(ackMode)-\(webSocket == nil ? "tcp" : "websocket")",
@@ -90,8 +87,7 @@ struct STOMPConnectionTests {
             group.addTask {
                 try await STOMPConnection.withConnection(
                     address: .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-                    configuration: .init(webSocket: webSocket),
-                    logger: self.publisherLogger
+                    configuration: .init(webSocket: webSocket)
                 ) { connection in
                     try await connection.send(
                         payload,
@@ -108,7 +104,7 @@ struct STOMPConnectionTests {
     #if os(macOS)
     @Test("Connect with Raw IP Address")
     func rawIPConnect() async throws {
-        try await STOMPConnection.withConnection(address: .hostname("127.0.0.1"), logger: self.logger) { connection in
+        try await STOMPConnection.withConnection(address: .hostname("127.0.0.1")) { connection in
             try await connection.send("Test", to: "/queue/raw-ip-address")
         }
     }
@@ -117,7 +113,7 @@ struct STOMPConnectionTests {
     @Test("Connect with Wrong Host and Port")
     func wrongHostAndPort() async throws {
         await #expect(throws: (any Error).self) {
-            try await STOMPConnection.withConnection(address: .hostname("invalid-host", port: 12345), logger: self.logger) { _ in }
+            try await STOMPConnection.withConnection(address: .hostname("invalid-host", port: 12345)) { _ in }
         }
     }
 
@@ -126,15 +122,14 @@ struct STOMPConnectionTests {
         await #expect(throws: STOMPClientError.errorFrame(message: "Bad CONNECT", body: "Access refused for user 'wrong-user'")) {
             try await STOMPConnection.withConnection(
                 address: .hostname(Self.hostname),
-                configuration: .init(login: "wrong-user", passcode: "wrong-pass"),
-                logger: self.logger
+                configuration: .init(login: "wrong-user", passcode: "wrong-pass")
             ) { _ in }
         }
     }
 
     @Test("Send Frame")
     func sendFrame() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname)) { connection in
             let frame = STOMPFrame(
                 command: .send,
                 headers: [
@@ -156,8 +151,7 @@ struct STOMPConnectionTests {
         await #expect(throws: STOMPClientError.timeout) {
             try await STOMPConnection.withConnection(
                 address: .hostname(Self.hostname),
-                configuration: .init(connectTimeout: .nanoseconds(1)),
-                logger: self.logger
+                configuration: .init(connectTimeout: .nanoseconds(1))
             ) { _ in }
         }
     }
@@ -166,8 +160,7 @@ struct STOMPConnectionTests {
     func receiptTimeout() async throws {
         try await STOMPConnection.withConnection(
             address: .hostname(Self.hostname),
-            configuration: .init(receiptTimeout: .nanoseconds(1)),
-            logger: self.logger
+            configuration: .init(receiptTimeout: .nanoseconds(1))
         ) { connection in
             _ = await #expect(throws: STOMPClientError.timeout) {
                 try await connection.send("Test", to: "/queue/receipt-timeout")
@@ -177,14 +170,14 @@ struct STOMPConnectionTests {
 
     @Test("Graceful Shutdown")
     func gracefulShutdown() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname)) { connection in
             try await connection.triggerGracefulShutdown()
         }
     }
 
     @Test("Send after Graceful Shutdown")
     func sendAfterGracefulShutdown() async throws {
-        try await STOMPConnection.withConnection(address: .hostname(Self.hostname), logger: self.logger) { connection in
+        try await STOMPConnection.withConnection(address: .hostname(Self.hostname)) { connection in
             try await connection.triggerGracefulShutdown()
             await #expect(throws: STOMPClientError.connectionClosed) {
                 try await connection.send("Test", to: "/queue/graceful-shutdown")
@@ -197,8 +190,7 @@ struct STOMPConnectionTests {
     func nioTransportServices() async throws {
         try await STOMPConnection.withConnection(
             address: .hostname(Self.hostname),
-            eventLoop: NIOTSEventLoopGroup.singleton.any(),
-            logger: self.logger
+            eventLoop: NIOTSEventLoopGroup.singleton.any()
         ) { connection in
             try await connection.send("Test", to: "/queue/nio-transport-services")
         }
@@ -211,7 +203,7 @@ struct STOMPConnectionTests {
         func heartBeatingTestingChannel() async throws {
             let channel = NIOAsyncTestingChannel()
             let configuration = STOMPConnectionConfiguration(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)))
-            let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration, logger: self.logger)
+            let _ = try await STOMPConnection.setupChannelAndConnect(channel, configuration: configuration)
             try await channel.processConnect(configuration: configuration)
 
             await channel.testingEventLoop.advanceTime(to: .now())
@@ -227,8 +219,7 @@ struct STOMPConnectionTests {
         func heartBeatingBroker(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)), webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(heartBeat: (outgoing: .seconds(1), incoming: .seconds(1)), webSocket: webSocket)
             ) { connection in
                 try await Task.sleep(for: .seconds(5))
                 try await connection.send(
@@ -242,19 +233,12 @@ struct STOMPConnectionTests {
         func sendHeartBeat(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 try await connection.heartBeat()
                 try await connection.triggerGracefulShutdown()
             }
         }
-
-        let logger: Logger = {
-            var logger = Logger(label: "HeartBeatingTests")
-            logger.logLevel = .trace
-            return logger
-        }()
     }
 
     @Suite("ConfigReader Tests")
@@ -285,8 +269,7 @@ struct STOMPConnectionTests {
 
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: 15674),
-                configuration: .init(config: config.scoped(to: "stomp")),
-                logger: self.logger
+                configuration: .init(config: config.scoped(to: "stomp"))
             ) { connection in
                 try await Task.sleep(for: .seconds(5))
                 try await connection.send("Test", to: "/queue/config-reader")
@@ -313,18 +296,11 @@ struct STOMPConnectionTests {
 
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname),
-                configuration: .init(config: config.scoped(to: "stomp")),
-                logger: self.logger
+                configuration: .init(config: config.scoped(to: "stomp"))
             ) { connection in
                 try await connection.send("Test", to: "/queue/config-reader")
             }
         }
-
-        let logger: Logger = {
-            var logger = Logger(label: "ConfigReaderTests")
-            logger.logLevel = .trace
-            return logger
-        }()
     }
 
     @Suite("Cancellation Tests")
@@ -333,8 +309,7 @@ struct STOMPConnectionTests {
         func cancellation(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 await withThrowingTaskGroup { group in
                     group.addTask {
@@ -355,8 +330,7 @@ struct STOMPConnectionTests {
         func alreadyCancelled(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 await withThrowingTaskGroup(of: Void.self) { group in
                     group.cancelAll()
@@ -376,7 +350,7 @@ struct STOMPConnectionTests {
         @Test("Cancellation does not Close Connection")
         func cancellationDoesNotCloseConnection() async throws {
             let channel = NIOAsyncTestingChannel()
-            let connection = try await STOMPConnection.setupChannelAndConnect(channel, logger: self.logger)
+            let connection = try await STOMPConnection.setupChannelAndConnect(channel)
             try await channel.processConnect()
 
             try await withThrowingTaskGroup { group in
@@ -401,12 +375,6 @@ struct STOMPConnectionTests {
                 }
             }
         }
-
-        let logger: Logger = {
-            var logger = Logger(label: "CancellationTests")
-            logger.logLevel = .trace
-            return logger
-        }()
     }
 
     @Suite("Transactions Tests")
@@ -415,8 +383,7 @@ struct STOMPConnectionTests {
         func subscriptionTransaction(ackMode: STOMPSubscription.AckMode, webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 try await connection.withTransaction { transaction in
                     try await withThrowingTaskGroup { group in
@@ -446,8 +413,7 @@ struct STOMPConnectionTests {
 
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
@@ -472,8 +438,7 @@ struct STOMPConnectionTests {
         func sendTransaction(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
@@ -503,7 +468,7 @@ struct STOMPConnectionTests {
 
         @Test("Abort Subscription Transaction", arguments: [STOMPSubscription.AckMode.client, .clientIndividual])
         func abortSubscriptionTransaction(ackMode: STOMPSubscription.AckMode) async throws {
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname)) { connection in
                 try? await connection.withTransaction { transaction in
                     try await withThrowingTaskGroup { group in
                         group.addTask {
@@ -531,7 +496,7 @@ struct STOMPConnectionTests {
                 }
             }
 
-            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname), logger: self.logger) { connection in
+            try await STOMPConnection.withConnection(address: .hostname(STOMPConnectionTests.hostname)) { connection in
                 try await connection.subscribe(to: "/queue/abort-sub-transaction-\(ackMode)", ackMode: .clientIndividual) { subscription in
                     for try await frame in subscription {
                         // The queue still has the message, since the ACK was rolled back
@@ -546,8 +511,7 @@ struct STOMPConnectionTests {
         func abortSendTransaction(webSocket: STOMPConnectionConfiguration.WebSocket?) async throws {
             try await STOMPConnection.withConnection(
                 address: .hostname(STOMPConnectionTests.hostname, port: webSocket == nil ? 61613 : 15674),
-                configuration: .init(webSocket: webSocket),
-                logger: self.logger
+                configuration: .init(webSocket: webSocket)
             ) { connection in
                 try await withThrowingTaskGroup { group in
                     group.addTask {
@@ -577,30 +541,6 @@ struct STOMPConnectionTests {
             }
         }
 
-        let logger: Logger = {
-            var logger = Logger(label: "TransactionsTests")
-            logger.logLevel = .trace
-            return logger
-        }()
-
         struct AbortTransaction: Error {}
     }
-
-    let logger: Logger = {
-        var logger = Logger(label: "STOMPConnectionTests")
-        logger.logLevel = .trace
-        return logger
-    }()
-
-    let subscriberLogger: Logger = {
-        var logger = Logger(label: "Subscriber")
-        logger.logLevel = .trace
-        return logger
-    }()
-
-    let publisherLogger: Logger = {
-        var logger = Logger(label: "Publisher")
-        logger.logLevel = .trace
-        return logger
-    }()
 }

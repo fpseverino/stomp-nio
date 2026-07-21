@@ -57,12 +57,12 @@ public final class STOMPClient: Sendable {
     ///   - address: The STOMP server address.
     ///   - configuration: The client's configuration. See ``STOMPClientConfiguration`` for details.
     ///   - eventLoopGroup: The underlying NIO `EventLoopGroup` to run client on.
-    ///   - logger: The `Logger` to log messages to.
+    ///   - logger: The `Logger` to log messages to. Defaults to the current task-local logger.
     public convenience init(
         _ address: STOMPServerAddress,
         configuration: STOMPClientConfiguration = .init(),
         eventLoopGroup: any EventLoopGroup = MultiThreadedEventLoopGroup.singleton,
-        logger: Logger
+        logger: Logger = Logger.current
     ) {
         self.init(
             address,

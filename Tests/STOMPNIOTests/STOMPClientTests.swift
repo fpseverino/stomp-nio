@@ -15,7 +15,7 @@ import Foundation
 import NIOTransportServices
 #endif
 
-@Suite("STOMPClient Tests")
+@Suite("STOMPClient Tests", .defaultLogger(logLevel: .trace))
 struct STOMPClientTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
@@ -23,8 +23,7 @@ struct STOMPClientTests {
     func pubSub(ackMode: STOMPSubscription.AckMode, webSocket: STOMPClientConfiguration.WebSocket?) async throws {
         let client = STOMPClient(
             .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-            configuration: .init(webSocket: webSocket),
-            logger: self.logger
+            configuration: .init(webSocket: webSocket)
         )
         async let _ = client.run()
 
@@ -59,8 +58,7 @@ struct STOMPClientTests {
 
         let client = STOMPClient(
             .hostname(Self.hostname, port: webSocket == nil ? 61613 : 15674),
-            configuration: .init(webSocket: webSocket),
-            logger: self.logger
+            configuration: .init(webSocket: webSocket)
         )
         async let _ = client.run()
 
@@ -94,7 +92,7 @@ struct STOMPClientTests {
     #if os(macOS)
     @Test("Connect with Raw IP Address")
     func rawIPConnect() async throws {
-        let client = STOMPClient(.hostname("127.0.0.1"), logger: self.logger)
+        let client = STOMPClient(.hostname("127.0.0.1"))
         async let _ = client.run()
 
         try await client.send("Test", to: "/queue/client-raw-ip-address")
@@ -103,7 +101,7 @@ struct STOMPClientTests {
 
     @Test("Send Frame")
     func sendFrame() async throws {
-        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        let client = STOMPClient(.hostname(Self.hostname))
         async let _ = client.run()
 
         let frame = STOMPFrame(
@@ -125,8 +123,7 @@ struct STOMPClientTests {
     func receiptTimeout() async throws {
         let client = STOMPClient(
             .hostname(Self.hostname),
-            configuration: .init(receiptTimeout: .nanoseconds(1)),
-            logger: self.logger
+            configuration: .init(receiptTimeout: .nanoseconds(1))
         )
         async let _ = client.run()
 
@@ -137,7 +134,7 @@ struct STOMPClientTests {
 
     @Test("Connection Graceful Shutdown")
     func connectionGracefulShutdown() async throws {
-        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        let client = STOMPClient(.hostname(Self.hostname))
         async let _ = client.run()
 
         try await client.withConnection { connection in
@@ -157,8 +154,7 @@ struct STOMPClientTests {
     func nioTransportServices() async throws {
         let client = STOMPClient(
             .hostname(Self.hostname),
-            eventLoopGroup: NIOTSEventLoopGroup.singleton.any(),
-            logger: self.logger
+            eventLoopGroup: NIOTSEventLoopGroup.singleton.any()
         )
         async let _ = client.run()
         try await client.send("Test", to: "/queue/client-nio-transport-services")
@@ -193,8 +189,7 @@ struct STOMPClientTests {
 
             let client = STOMPClient(
                 .hostname(STOMPConnectionTests.hostname, port: 15674),
-                configuration: .init(config: config.scoped(to: "stomp")),
-                logger: self.logger
+                configuration: .init(config: config.scoped(to: "stomp"))
             )
             async let _ = client.run()
 
@@ -222,24 +217,17 @@ struct STOMPClientTests {
 
             let client = STOMPClient(
                 .hostname(STOMPConnectionTests.hostname),
-                configuration: .init(config: config.scoped(to: "stomp")),
-                logger: self.logger
+                configuration: .init(config: config.scoped(to: "stomp"))
             )
             async let _ = client.run()
 
             try await client.send("Test", to: "/queue/client-config-reader")
         }
-
-        let logger: Logger = {
-            var logger = Logger(label: "ConfigReaderTests")
-            logger.logLevel = .trace
-            return logger
-        }()
     }
 
     @Test("Shutdown")
     func shutdown() async throws {
-        let client = STOMPClient(.hostname(Self.hostname), logger: self.logger)
+        let client = STOMPClient(.hostname(Self.hostname))
         try await withThrowingTaskGroup { group in
             group.addTask {
                 await client.run()
@@ -254,10 +242,4 @@ struct STOMPClientTests {
             try await client.send("Test", to: "/queue/client-shutdown")
         }
     }
-
-    let logger: Logger = {
-        var logger = Logger(label: "STOMPClientTests")
-        logger.logLevel = .trace
-        return logger
-    }()
 }

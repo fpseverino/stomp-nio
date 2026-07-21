@@ -14,12 +14,14 @@ It defines a text based wire-format for messages passed between these clients an
 STOMP has been in active use for several years and is supported by many message brokers and client libraries.
 
 STOMPNIO is a Swift NIO based implementation of a STOMP client. It supports:
+
 - STOMP versions 1.0, 1.1, and 1.2
 - Unencrypted and encrypted (via TLS) connections
 - WebSocket connections
-- POSIX sockets
+- POSIX sockets and Unix domain sockets
 - Apple's Network framework via [NIOTransportServices](https://github.com/apple/swift-nio-transport-services) (required for iOS)
-- Unix domain sockets
+- [Swift Configuration](https://github.com/apple/swift-configuration) to create `STOMPClientConfiguration` and `STOMPConnectionConfiguration` from a configuration file
+- [Task-local loggers](https://swiftpackageindex.com/apple/swift-log/documentation/logging/slg-0006-task-local-logger) from SwiftLog
 
 ## Overview
 
@@ -28,7 +30,7 @@ Create a client with server connection details:
 ```swift
 import STOMPNIO
 
-let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+let stompClient = STOMPClient(.hostname("localhost"))
 ```
 
 The `STOMPClient` uses a connection pool, which requires a background process to manage it.
@@ -36,7 +38,7 @@ The `STOMPClient` uses a connection pool, which requires a background process to
 You can run the background process using `async let`. When you leave the scope of the function your `async let` variable is declared the client will be shutdown.
 
 ```swift
-let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+let stompClient = STOMPClient(.hostname("localhost"))
 async let _ = stompClient.run()
 
 // Use STOMP client
@@ -68,7 +70,7 @@ let services: [Service] = [myApp, stompClient]
 let serviceGroup = ServiceGroup(
     services: services,
     gracefulShutdownSignals: [.sigint, .sigterm],
-    logger: logger
+    logger: Logger(...)
 )
 try await serviceGroup.run()
 ```

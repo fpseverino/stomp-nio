@@ -22,7 +22,7 @@ When the closure returns successfully, the transaction is committed automaticall
 If the closure throws an error, the transaction will be aborted.
 
 ```swift
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
+try await STOMPConnection.withConnection(address: .hostname("localhost")) { connection in
     try await connection.withTransaction { transaction in
         try await transaction.send("Message in Transaction", to: "/queue/a")
     }
@@ -44,7 +44,7 @@ try await stompClient.withConnection { connection in
 Even inside the transaction closure, you can send messages or create subscriptions that are not part of the transaction by using the original ``STOMPConnection`` instance.
 
 ```swift
-try await STOMPConnection.withConnection(address: .hostname("localhost"), logger: logger) { connection in
+try await STOMPConnection.withConnection(address: .hostname("localhost")) { connection in
     try await connection.withTransaction { transaction in
         try await withThrowingTaskGroup { group in
             group.addTask {

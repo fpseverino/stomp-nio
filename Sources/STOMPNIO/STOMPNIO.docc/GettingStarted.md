@@ -11,13 +11,13 @@ Add STOMP NIO as a dependency to your project and targets that use it.
 You can use the `add-dependency` command:
 
 ```bash
-swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.0.6
+swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.0.9
 ```
 
 or edit Package.swift directly:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.0.6"),
+    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.0.9"),
 ]
 ```
 
@@ -54,7 +54,7 @@ import STOMPNIO
 You can either run them using a Task group, for example:
 
 ```swift
-let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+let stompClient = STOMPClient(.hostname("localhost"))
 try await withThrowingTaskGroup { group in
     group.addTask {
         // run connection pool in the background
@@ -67,14 +67,14 @@ try await withThrowingTaskGroup { group in
 Or you can use [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) to manage the connection manager.
 
 ```swift
-let stompClient = STOMPClient(.hostname("localhost"), logger: logger)
+let stompClient = STOMPClient(.hostname("localhost"))
 
 let services: [Service] = [stompClient, webServer, otherService]
 let serviceGroup = ServiceGroup(
     services: services,
     gracefulShutdownSignals: [.sigint],
     cancellationSignals: [.sigterm],
-    logger: logger
+    logger: Logger(...)
 )
 try await serviceGroup.run()
 ```
@@ -94,6 +94,47 @@ Or you can subscribe to destinations using `STOMPClient.subscribe`. A single con
 try await stompClient.subscribe(to: "/queue/a") { subscription in
     for try await frame in subscription {
         print(String(buffer: frame.body))
+    }
+}
+```
+
+### Logging
+
+By default, ``STOMPClient/init(_:configuration:eventLoopGroup:logger:)`` and ``STOMPConnection/withConnection(address:configuration:eventLoop:logger:operation:)`` use the current task-local logger ([`Logger.current`](https://swiftpackageindex.com/apple/swift-log/documentation/logging/logger/current)), which by default is a `Logger` with an empty label and a log level of `.info`.
+
+You can set a custom logger for the connection by passing it via a parameter to `STOMPClient` initializer or the `withConnection` method, or you can wrap the client/connection creation code within a `withLogger` closure, which will set a task-local logger.
+
+```swift
+// Your custom logger
+var myLogger = Logger(label: "com.example.stomp")
+myLogger.logLevel = .trace
+
+// Pass the logger to the `STOMPClient` initializer
+let stompClient = STOMPClient(.hostname("localhost"), logger: myLogger)
+async let _ = stompClient.run()
+// Client events will be logged with `myLogger`
+
+// Pass the logger to the `withConnection` method
+try await STOMPConnection.withConnection(
+    address: .hostname("localhost"),
+    logger: myLogger
+) { connection in
+    // Connection events will be logged with `myLogger`
+}
+
+// OR:
+
+// Wrap the client creation code within a `withLogger` closure
+try await withLogger(myLogger) { _ in
+    let stompClient = STOMPClient(.hostname("localhost"))
+    async let _ = stompClient.run()
+    // Client events will be logged with `myLogger`
+}
+
+// Wrap the connection creation code within a `withLogger` closure
+try await withLogger(myLogger) { _ in
+    try await STOMPConnection.withConnection(address: .hostname("localhost")) { connection in
+        // Connection events will be logged with `myLogger`
     }
 }
 ```
