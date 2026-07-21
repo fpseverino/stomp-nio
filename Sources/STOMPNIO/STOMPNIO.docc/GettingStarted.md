@@ -133,10 +133,7 @@ try await withLogger(myLogger) { _ in
 
 // Wrap the connection creation code within a `withLogger` closure
 try await withLogger(myLogger) { _ in
-    try await STOMPConnection.withConnection(
-        address: .hostname("localhost"),
-        logger: myLogger
-    ) { connection in
+    try await STOMPConnection.withConnection(address: .hostname("localhost")) { connection in
         // Connection events will be logged with `myLogger`
     }
 }
