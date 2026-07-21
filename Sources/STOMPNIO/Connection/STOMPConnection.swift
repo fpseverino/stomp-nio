@@ -63,7 +63,7 @@ public final actor STOMPConnection: Sendable {
     ///   - address: Internet address of the STOMP server
     ///   - configuration: Configuration for the STOMP connection
     ///   - eventLoop: EventLoop to run connection on
-    ///   - logger: Logger to use for the connection
+    ///   - logger: Logger to use for the connection, defaults to the current task-local logger
     ///   - operation: Closure where STOMP operations using the connection are performed
     ///
     /// - Returns: The value returned by the `operation` closure
@@ -71,7 +71,7 @@ public final actor STOMPConnection: Sendable {
         address: STOMPServerAddress,
         configuration: STOMPConnectionConfiguration = .init(),
         eventLoop: any EventLoop = MultiThreadedEventLoopGroup.singleton.any(),
-        logger: Logger,
+        logger: Logger = Logger.current,
         operation: (STOMPConnection) async throws -> Value
     ) async throws -> Value {
         let connection = try await self.connect(
@@ -309,7 +309,7 @@ public final actor STOMPConnection: Sendable {
     package static func setupChannelAndConnect(
         _ channel: any Channel,
         configuration: STOMPConnectionConfiguration = .init(),
-        logger: Logger
+        logger: Logger = Logger.current
     ) async throws -> STOMPConnection {
         if !channel.eventLoop.inEventLoop {
             return try await channel.eventLoop.flatSubmit {

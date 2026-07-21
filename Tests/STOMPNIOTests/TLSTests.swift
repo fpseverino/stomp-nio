@@ -19,7 +19,7 @@ import NIOTransportServices
 import NIOSSL
 #endif
 
-@Suite("TLS Tests", .serialized)
+@Suite("TLS Tests", .serialized, .defaultLogger(logLevel: .trace))
 struct TLSTests {
     static let hostname = ProcessInfo.processInfo.environment["RABBITMQ_SERVER"] ?? "localhost"
 
@@ -33,8 +33,7 @@ struct TLSTests {
                     tls: .enable(Self.getTLSConfiguration(), tlsServerName: "fpseverino.com"),
                     webSocket: webSocket
                 ),
-                eventLoop: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoop: TLSTests.eventLoopGroupSingleton.any()
             ) { connection in
                 try await connection.send(
                     "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!",
@@ -43,7 +42,7 @@ struct TLSTests {
             }
 
             // Try consuming the message with a standard unencrypted TCP connection
-            try await STOMPConnection.withConnection(address: .hostname(TLSTests.hostname), logger: self.logger) { connection in
+            try await STOMPConnection.withConnection(address: .hostname(TLSTests.hostname)) { connection in
                 try await connection.subscribe(to: "/queue/tls-\(webSocket == nil ? "tcp" : "websocket")") { subscription in
                     for try await frame in subscription {
                         #expect(String(buffer: frame.body) == "Hello, STOMP over TLS\(webSocket == nil ? "" : " and WebSockets")!")
@@ -72,8 +71,7 @@ struct TLSTests {
                         tlsServerName: "fpseverino.com"
                     )
                 ),
-                eventLoop: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoop: TLSTests.eventLoopGroupSingleton.any()
             ) { connection in
                 try await connection.send("Test", to: "/queue/tls-p12")
             }
@@ -94,19 +92,12 @@ struct TLSTests {
             try await STOMPConnection.withConnection(
                 address: .hostname(TLSTests.hostname, port: 61614),
                 configuration: .init(config: configReader),
-                eventLoop: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoop: TLSTests.eventLoopGroupSingleton.any()
             ) { connection in
                 try await connection.send("Test", to: "/queue/tls-config")
             }
         }
         #endif
-
-        let logger: Logger = {
-            var logger = Logger(label: "TLSSTOMPConnectionTests")
-            logger.logLevel = .trace
-            return logger
-        }()
 
         static func getTLSConfiguration(
             withTrustRoots: Bool = true,
@@ -156,8 +147,7 @@ struct TLSTests {
                     tls: .enable(try Self.getTLSConfiguration(), tlsServerName: "fpseverino.com"),
                     webSocket: webSocket
                 ),
-                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any()
             )
             async let _ = client.run()
             try await client.send(
@@ -166,7 +156,7 @@ struct TLSTests {
             )
 
             // Try consuming the message with a standard unencrypted TCP connection
-            try await STOMPConnection.withConnection(address: .hostname(TLSTests.hostname), logger: self.logger) { connection in
+            try await STOMPConnection.withConnection(address: .hostname(TLSTests.hostname)) { connection in
                 try await connection.subscribe(to: "/queue/client-tls-\(webSocket == nil ? "tcp" : "websocket")") { subscription in
                     for try await frame in subscription {
                         #expect(String(buffer: frame.body) == "Hello, STOMPClient over TLS\(webSocket == nil ? "" : " and WebSockets")!")
@@ -195,8 +185,7 @@ struct TLSTests {
                         tlsServerName: "fpseverino.com"
                     )
                 ),
-                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any()
             )
             async let _ = client.run()
             try await client.send("Test", to: "/queue/client-tls-p12")
@@ -217,19 +206,12 @@ struct TLSTests {
             let client = STOMPClient(
                 .hostname(TLSTests.hostname, port: 61614),
                 configuration: .init(config: configReader),
-                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any(),
-                logger: self.logger
+                eventLoopGroup: TLSTests.eventLoopGroupSingleton.any()
             )
             async let _ = client.run()
             try await client.send("Test", to: "/queue/client-tls-config")
         }
         #endif
-
-        let logger: Logger = {
-            var logger = Logger(label: "TLSSTOMPClientTests")
-            logger.logLevel = .trace
-            return logger
-        }()
 
         static func getTLSConfiguration(
             withTrustRoots: Bool = true,
