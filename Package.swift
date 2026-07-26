@@ -25,7 +25,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.4"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.8.0"),
-        .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.2", traits: []),
         .package(url: "https://github.com/apple/swift-http-types.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.22.0"),
     ],
