@@ -1,15 +1,10 @@
 import Configuration
+import Foundation
 import Logging
 import NIOCore
 import NIOFoundationCompat
 import STOMPNIO
 import Testing
-
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
 #if canImport(Network)
 import NIOTransportServices

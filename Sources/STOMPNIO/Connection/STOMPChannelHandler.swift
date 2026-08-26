@@ -232,8 +232,18 @@ final class STOMPChannelHandler: ChannelDuplexHandler {
             }
             self.processDeadlineCallbackAction(action: deadlineAction)
             task.promise.succeed(frame)
+        case .succeedTaskAndClose(let task):
+            task.promise.succeed(frame)
+            self.subscriptions.close(error: STOMPClientError.connectionClosed)
+            self.deadlineCallback?.cancel()
+            context.close(promise: nil)
         case .failTask(let task, let error):
             task.promise.fail(error)
+        case .failTaskAndClose(let task, let error):
+            task.promise.fail(error)
+            self.subscriptions.close(error: error)
+            self.deadlineCallback?.cancel()
+            context.close(promise: nil)
         case .unhandledTask:
             break
         case .messageReceived:

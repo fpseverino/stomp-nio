@@ -1,7 +1,3 @@
-import Foundation
-import Logging
-import NIOEmbedded
-import Synchronization
 import Testing
 
 @testable import STOMPNIO
