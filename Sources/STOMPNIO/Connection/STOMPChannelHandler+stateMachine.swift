@@ -178,7 +178,9 @@ extension STOMPChannelHandler {
         enum ReceivedFrameAction {
             case messageReceived
             case succeedTask(STOMPTask, DeadlineCallbackAction)
+            case succeedTaskAndClose(STOMPTask)
             case failTask(STOMPTask, any Error)
+            case failTaskAndClose(STOMPTask, any Error)
             case unhandledTask
             case closeConnection(any Error)
         }
@@ -248,7 +250,7 @@ extension STOMPChannelHandler {
                                 state.tasks.remove(at: index)
                                 if state.tasks.isEmpty {
                                     self = .closed(nil)
-                                    return .succeedTask(task, .cancel)
+                                    return .succeedTaskAndClose(task)
                                 } else {
                                     self = .closing(state)
                                     let deadlineCallback: DeadlineCallbackAction =
@@ -264,7 +266,7 @@ extension STOMPChannelHandler {
                             state.tasks.remove(at: index)
                             if state.tasks.isEmpty {
                                 self = .closed(nil)
-                                return .failTask(task, error)
+                                return .failTaskAndClose(task, error)
                             } else {
                                 self = .closing(state)
                                 return .failTask(task, error)
