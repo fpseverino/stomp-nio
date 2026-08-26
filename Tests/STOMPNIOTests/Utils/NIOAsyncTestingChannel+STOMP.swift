@@ -1,7 +1,8 @@
 import NIOCore
 import NIOEmbedded
-import STOMPNIO
 import Testing
+
+@testable import STOMPNIO
 
 extension NIOAsyncTestingChannel {
     func processConnect(configuration: STOMPConnectionConfiguration = .init()) async throws {
@@ -30,5 +31,16 @@ extension NIOAsyncTestingChannel {
                     """
             )
         )
+    }
+
+    func writeInboundFrame(_ frame: STOMPFrame) async throws {
+        var buffer = ByteBuffer()
+        frame.encode(into: &buffer)
+        try await self.writeInbound(buffer)
+    }
+
+    func waitForOutboundWriteFrame() async throws -> STOMPFrame {
+        var buffer = try await self.waitForOutboundWrite(as: ByteBuffer.self)
+        return try #require(try STOMPFrameDecoder().decode(buffer: &buffer))
     }
 }

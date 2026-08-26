@@ -60,6 +60,13 @@ let package = Package(
         .testTarget(
             name: "STOMPNIOTests",
             dependencies: [
+                .target(name: "STOMPNIO")
+            ],
+            swiftSettings: swiftSettings
+        ),
+        .testTarget(
+            name: "IntegrationTests",
+            dependencies: [
                 .target(name: "STOMPNIO"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
