@@ -5,9 +5,11 @@ public struct STOMPSubscription: AsyncSequence, Sendable {
     /// The type that the sequence produces.
     public typealias Element = STOMPFrame
 
-    typealias BaseAsyncSequence = AsyncThrowingStream<STOMPFrame, any Error>
+    @usableFromInline
+    typealias BaseAsyncSequence = AsyncThrowingStream<Element, any Error>
     typealias Continuation = BaseAsyncSequence.Continuation
 
+    @usableFromInline
     let base: BaseAsyncSequence
 
     static func makeStream() -> (Self, Self.Continuation) {
@@ -22,15 +24,21 @@ public struct STOMPSubscription: AsyncSequence, Sendable {
 
     /// An iterator that provides subscription messages.
     public struct AsyncIterator: AsyncIteratorProtocol {
+        @usableFromInline
         var base: BaseAsyncSequence.AsyncIterator
 
         @concurrent
+        @inlinable
         public mutating func next() async throws -> Element? {
             try await self.base.next()
         }
 
-        public mutating func next(isolation actor: isolated (any Actor)?) async throws(any Error) -> STOMPFrame? {
+        @inlinable
+        public mutating func next(isolation actor: isolated (any Actor)?) async throws -> Element? {
             try await self.base.next(isolation: actor)
         }
     }
 }
+
+@available(*, unavailable)
+extension STOMPSubscription.AsyncIterator: Sendable {}
