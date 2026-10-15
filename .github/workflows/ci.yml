@@ -21,6 +21,7 @@ jobs:
         macos-version:
           - macos-15
           - macos-26
+          - xcode-27
     runs-on: ${{ matrix.macos-version }}
     timeout-minutes: 15
     steps:
@@ -29,7 +30,7 @@ jobs:
       with:
         xcode-version: latest-stable
     - name: Check out code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Install and run RabbitMQ
       run: |
         brew install rabbitmq
@@ -51,7 +52,7 @@ jobs:
       with:
         xcode-version: latest-stable
     - name: Check out code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Xcodebuild
       run: |
         xcodebuild build -scheme stomp-nio -destination 'platform=iOS Simulator,name=iPhone 17'
@@ -64,6 +65,7 @@ jobs:
         tag:
           - swift:6.2
           - swift:6.3
+          - swift:6.4
     container:
       image: ${{ matrix.tag }}
     services:
@@ -82,7 +84,7 @@ jobs:
     - name: Install curl
       run: apt-get update -yq && apt-get install -y curl
     - name: Check out code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Restart RabbitMQ
       uses: docker://docker
       with:
@@ -103,7 +105,7 @@ jobs:
       fail-fast: false
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Build for Android
         uses: skiptools/swift-android-action@v2
         with:
@@ -130,7 +132,7 @@ jobs:
     - name: Install curl
       run: apt-get update -yq && apt-get install -y curl
     - name: Check out code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Restart RabbitMQ
       uses: docker://docker
       with:
@@ -148,7 +150,7 @@ jobs:
       - name: Configure git
         run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Lint
         run: |
           apt -q update && apt -yq install curl
