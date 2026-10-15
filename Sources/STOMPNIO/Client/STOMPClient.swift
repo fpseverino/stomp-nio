@@ -129,6 +129,10 @@ extension STOMPClient {
     /// Cancelling the task which executes the ``run()`` method, is equivalent to closing the client. Once the task
     /// has been cancelled the client is not able to process any new queries or prepared statements.
     ///
+    /// Graceful shutdown is different to cancellation.
+    /// If the client is gracefully shut down, work continues as before until the request queue is drained and work is completed.
+    /// New incoming requests will be rejected.
+    ///
     /// > Note:
     /// ``STOMPClient`` implements [ServiceLifecycle](https://github.com/swift-server/swift-service-lifecycle)'s `Service` protocol,
     /// if the `ServiceLifecycle` package trait is enabled (by default it is).
@@ -137,8 +141,10 @@ extension STOMPClient {
         let atomicOp = self.runningAtomic.compareExchange(expected: false, desired: true, ordering: .relaxed)
         precondition(!atomicOp.original, "STOMPClient.run() should just be called once!")
         #if ServiceLifecycle
-        await cancelWhenGracefulShutdown {
+        await withGracefulShutdownHandler {
             await self._withTaskGroup()
+        } onGracefulShutdown: {
+            self.connectionPool.triggerGracefulShutdown()
         }
         #else
         await self._withTaskGroup()
