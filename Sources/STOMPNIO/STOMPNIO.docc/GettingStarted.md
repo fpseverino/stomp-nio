@@ -11,13 +11,13 @@ Add STOMP NIO as a dependency to your project and targets that use it.
 You can use the `add-dependency` command:
 
 ```bash
-swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.0.9
+swift package add-dependency https://github.com/fpseverino/stomp-nio --from: 0.1.0
 ```
 
 or edit Package.swift directly:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.0.9"),
+    .package(url: "https://github.com/fpseverino/stomp-nio.git", from: "0.1.0"),
 ]
 ```
 
